@@ -42,3 +42,9 @@ Route::get("/AgenCita", function(){
 
 
 
+// Rutas de Ronald
+
+use App\Http\Controllers\UsuariosController;
+
+Route::resource('Usuarios', UsuariosController::class);
+
