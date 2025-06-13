@@ -1,78 +1,15 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MediTech!</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <style>
-    body {
-      background-color: #374563; /* Fondo principal */
-      font-family: Arial, sans-serif;
-      color: white;
-    }
-    header {
-      background-color: #12153b;
-      padding: 1rem 2rem;
-      font-weight: bold;
-      font-size: 1.5rem;
-      font-family: 'Impact', sans-serif;
-      letter-spacing: 2px;
-      color: white;
-    }
-    .btn-green {
-      background-color: #2e6136;
-      border: none;
-      color: white;
-    }
-    .btn-green:hover {
-      background-color: #3d7d49;
-      color: white;
-    }
-    .btn-purple {
-      background-color: #5c59e6;
-      border: none;
-      color: white;
-    }
-    .btn-purple:hover {
-      background-color: #7b78f2;
-      color: white;
-    }
-    .filter-label {
-      color: white;
-      font-weight: 500;
-      line-height: 2.4;
-    }
-    .table thead {
-      background-color: #12153b;
-    }
-    .table thead th {
-      color: white;
-    }
-    .table tbody tr td {
-      vertical-align: middle;
-    }
-    @media (max-width: 576px) {
-      .table-responsive {
-        font-size: 0.9rem;
-      }
-      header {
-        font-size: 1.2rem;
-        padding: 0.8rem 1rem;
-      }
-    }
-  </style>
-</head>
-<body>
+@extends('Plantillas.sesion')
 
+@section('Contenido')
+@include('Plantillas.navmoderador')
 
-<div class="container py-4">
+<div class="container py-4 text-light bg-dark rounded">
   <header class="bg-dark text-white p-3 mb-4" style="font-family: 'Impact', sans-serif; font-size: 1.5rem;">
-    MEDITECH!
+    <img style="width: 5rem;" src="{{ asset('image/meditech_logo.png') }}" alt="logo">
   </header>
 
   <div class="mb-3">
-    <a href="#" class="btn btn-success">Crear Nuevo Usuario</a>
+    <a href="{{ route('usuarios.create') }}" class="btn btn-success">Crear Nuevo Usuario</a>
   </div>
 
   <form method="GET" action="#" class="row g-3 align-items-center mb-4">
@@ -123,7 +60,7 @@
             </td>
             <td>{{ ucfirst($usuario->estado) }}</td>
             <td>
-              <a href="#" class="btn btn-primary btn-sm">Ver...</a>
+                <a href="{{ route('usuarios.show', $usuario->id) }}" class="btn btn-primary btn-sm">Ver...</a>
             </td>
           </tr>
         @empty
@@ -140,6 +77,13 @@
   </div>
 </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+@if(session('success'))
+  <div class="alert alert-success">{{ session('success') }}</div>
+@endif
+
+@if(session('error'))
+  <div class="alert alert-danger">{{ session('error') }}</div>
+@endif
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+@endsection

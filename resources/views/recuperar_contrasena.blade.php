@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Iniciar Sesión - MediTech!</title>
+  <title>Recuperar Contraseña - MediTech!</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <style>
     body {
       background-color: #374563;
-      font-family: Arial, sans-serif;
       color: white;
+      font-family: Arial, sans-serif;
       min-height: 100vh;
     }
     header {
@@ -33,12 +33,14 @@
     .form-label {
       color: #f3f3f3;
     }
-    .btn-success {
-      background-color: #2e6136;
+    .btn-blue {
+      background-color: #5c59e6;
+      color: #fff;
       border: none;
     }
-    .btn-success:hover {
-      background-color: #3d7d49;
+    .btn-blue:hover {
+      background-color: #7b78f2;
+      color: #fff;
     }
     .text-link {
       color: #5c59e6;
@@ -59,60 +61,46 @@
   </style>
 </head>
 <body>
-  <header>MediTech! – Iniciar Sesión</header>
+  <header>
+    MediTech! – Recuperar Contraseña
+  </header>
 
   <div class="form-container">
-    @if(session('status'))
+    <h5 class="mb-3" style="font-family: 'Impact', sans-serif;">¿Olvidaste tu contraseña?</h5>
+
+    @if (session('status'))
       <div class="alert alert-success">{{ session('status') }}</div>
     @endif
-    @if($errors->any())
+
+    @if ($errors->any())
       <div class="alert alert-danger mb-3">
         <ul class="mb-0">
-          @foreach($errors->all() as $error)
+          @foreach ($errors->all() as $error)
             <li>{{ $error }}</li>
           @endforeach
         </ul>
       </div>
     @endif
 
-    <form method="POST" action="{{ route('login.post') }}">
+    <form method="POST" action="{{ route('password.email') }}">
       @csrf
       <div class="mb-3">
-        <label for="correo" class="form-label">Correo electrónico:</label>
+        <label for="correo" class="form-label">Correo electrónico registrado:</label>
         <input
           type="email"
-          name="correo"
           id="correo"
+          name="correo"
           class="form-control"
           placeholder="correo@ejemplo.com"
-          required autofocus
-          value="{{ old('correo') }}"
-        />
-      </div>
-
-      <div class="mb-3">
-        <label for="contrasena" class="form-label">Contraseña:</label>
-        <input
-          type="password"
-          name="contrasena"
-          id="contrasena"
-          class="form-control"
-          placeholder="********"
           required
+          autofocus
         />
       </div>
-
-      <button type="submit" class="btn btn-success w-100 mb-2">Iniciar sesión</button>
-
-      <div class="text-center">
-        <a href="{{ route('password.request') }}" class="text-link small">¿Olvidaste tu contraseña?</a>
-      </div>
+      <button type="submit" class="btn btn-blue w-100">Enviar enlace de recuperación</button>
     </form>
 
-    <div class="mt-4 text-center">
-      <p class="small text-light">
-        ¿Aún no tienes cuenta? <a href="{{ route('register') }}" class="text-link">Regístrate aquí</a>
-      </p>
+    <div class="mt-3 text-center">
+      <a href="{{ route('login') }}" class="text-link">Volver al inicio de sesión</a>
     </div>
   </div>
 

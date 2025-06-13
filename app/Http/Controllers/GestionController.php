@@ -1,0 +1,131 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+
+class GestionController extends Controller
+{
+    public function inicio()
+    {
+        return view('gestion.inicio');
+    }
+
+    public function inicioPaciente()
+    {
+        $usuario = auth()->user();
+
+        // Obtener citas próximas y pasadas con estado
+        $citasProximas = \App\Models\Cita::where('paciente_id', $usuario->id)
+            ->where('fecha', '>=', now()->toDateString())
+            ->orderBy('fecha')
+            ->orderBy('hora')
+            ->get();
+
+        $citasPasadas = \App\Models\Cita::where('paciente_id', $usuario->id)
+            ->where('fecha', '<', now()->toDateString())
+            ->orderBy('fecha', 'desc')
+            ->orderBy('hora', 'desc')
+            ->get();
+
+        // Obtener notificaciones no leídas
+        $notificaciones = \App\Models\Notification::where('usuario_id', $usuario->id)
+            ->noLeidas()
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Obtener datos del perfil
+        $perfil = $usuario;
+
+        // Obtener expediente médico (simplificado)
+        $expediente = \App\Models\MedicalNote::where('paciente_id', $usuario->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return view('gestion.inicio_paciente', compact('citasProximas', 'citasPasadas', 'notificaciones', 'perfil', 'expediente'));
+    }
+
+    public function expedientePaciente()
+    {
+        $usuario = auth()->user();
+        $expediente = \App\Models\MedicalNote::where('paciente_id', $usuario->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return view('paciente.expediente', compact('expediente'));
+    }
+
+    public function expedientePacientePdf()
+    {
+        $usuario = auth()->user();
+        $expediente = \App\Models\MedicalNote::where('paciente_id', $usuario->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Aquí se puede implementar la generación de PDF con una librería como Dompdf o Snappy
+        // Por ahora, devolveremos un mensaje temporal
+        return response()->json(['message' => 'Generación de PDF pendiente de implementación']);
+    }
+
+    public function notificacionesPaciente()
+    {
+        $usuario = auth()->user();
+        $notificaciones = \App\Models\Notification::where('usuario_id', $usuario->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return view('paciente.notificaciones', compact('notificaciones'));
+    }
+
+    public function subirDocumentoPaciente(Request $request)
+    {
+        $request->validate([
+            'documento' => 'required|file|mimes:pdf,jpg,jpeg,png|max:2048',
+        ]);
+
+        $usuario = auth()->user();
+
+        $path = $request->file('documento')->store('documentos_paciente');
+
+        // Aquí se puede guardar la ruta del documento en la base de datos si es necesario
+
+        return redirect()->back()->with('success', 'Documento subido correctamente.');
+    }
+
+    public function actualizarPerfilPaciente(Request $request)
+    {
+        $usuario = auth()->user();
+
+        $request->validate([
+            'nombre' => 'required|string|max:150',
+            'correo' => 'required|email|unique:usuarios,correo,' . $usuario->id,
+            'telefono' => 'nullable|string|max:20',
+        ]);
+
+        $usuario->nombre = $request->nombre;
+        $usuario->correo = $request->correo;
+        $usuario->telefono = $request->telefono;
+        $usuario->save();
+
+        return redirect()->back()->with('success', 'Perfil actualizado correctamente.');
+    }
+
+    public function cambiarContrasenaPaciente(Request $request)
+    {
+        $usuario = auth()->user();
+
+        $request->validate([
+            'password_actual' => 'required',
+            'password_nueva' => 'required|min:8|confirmed',
+        ]);
+
+        if (!\Illuminate\Support\Facades\Hash::check($request->password_actual, $usuario->contrasena)) {
+            return redirect()->back()->withErrors(['password_actual' => 'La contraseña actual es incorrecta.']);
+        }
+
+        $usuario->contrasena = \Illuminate\Support\Facades\Hash::make($request->password_nueva);
+        $usuario->save();
+
+        return redirect()->back()->with('success', 'Contraseña cambiada correctamente.');
+    }
+}
