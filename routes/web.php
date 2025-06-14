@@ -6,6 +6,7 @@ use App\Http\Controllers\UsuariosController;
 use App\Http\Controllers\ClinicaController;
 use App\Http\Controllers\GestionController;
 use App\Http\Controllers\CitaController;
+use App\Http\Controllers\PerfilController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -45,16 +46,21 @@ Route::resource('usuarios', UsuariosController::class);
 // Gestión inicio
 Route::middleware('auth')->group(function () {
     Route::get('/gestion/inicio', [GestionController::class, 'inicio'])->name('gestion.inicio');
-    Route::get('/gestion/inicio-paciente', [GestionController::class, 'inicioPaciente'])->name('gestion.inicioPaciente');
-
-    // Clínica
+    Route::get('/gestion/inicio-paciente', [GestionController::class, 'inicioPaciente'])->name('gestion.inicioPaciente');    // Clínica
     Route::get('/clinica', [ClinicaController::class, 'show'])->name('clinica.show');
     Route::get('/clinica/index', [ClinicaController::class, 'index'])->name('clinica.index');
-    Route::get('/gestion/clinicas', [GestionController::class, 'listarClinicas'])->name('gestion.listarClinicas');
-
-    // Expediente Médico Paciente
+    Route::get('/clinica/create', [ClinicaController::class, 'create'])->name('clinica.create');
+    Route::post('/clinica', [ClinicaController::class, 'store'])->name('clinica.store');
+    Route::get('/clinica/{id}/editar', [ClinicaController::class, 'edit'])->name('clinica.edit');
+    Route::put('/clinica/{id}', [ClinicaController::class, 'update'])->name('clinica.update');
+    Route::delete('/clinica/{id}', [ClinicaController::class, 'destroy'])->name('clinica.destroy');
+    Route::get('/gestion/clinicas', [GestionController::class, 'listarClinicas'])->name('gestion.listarClinicas');    // Expediente Médico Paciente
     Route::get('/paciente/expediente', [GestionController::class, 'expedientePaciente'])->name('paciente.expediente');
+    Route::get('/paciente/expedientes', [GestionController::class, 'expedientesPaciente'])->name('paciente.expedientes');
     Route::get('/paciente/expediente/pdf', [GestionController::class, 'expedientePacientePdf'])->name('paciente.expediente.pdf');
+    
+    // Expediente Personal del Paciente
+    Route::get('/paciente/expediente-personal', [GestionController::class, 'expedientePersonal'])->name('paciente.expediente.personal');
 
     // Notificaciones Paciente
     Route::get('/paciente/notificaciones', [GestionController::class, 'notificacionesPaciente'])->name('paciente.notificaciones');
@@ -63,22 +69,27 @@ Route::middleware('auth')->group(function () {
     Route::post('/paciente/documento/subir', [GestionController::class, 'subirDocumentoPaciente'])->name('paciente.subirDocumento');
 
     // Actualizar Perfil Paciente
-    Route::post('/paciente/perfil/actualizar', [GestionController::class, 'actualizarPerfilPaciente'])->name('paciente.actualizarPerfil');
-
-    // Cambiar Contraseña Paciente
-    Route::post('/paciente/contrasena/cambiar', [GestionController::class, 'cambiarContrasenaPaciente'])->name('paciente.cambiarContrasena');
-    Route::get('/clinica/editar', [ClinicaController::class, 'edit'])->name('clinica.edit');
-    Route::put('/clinica', [ClinicaController::class, 'update'])->name('clinica.update');
-
-    // Citas de Pacientes
+    Route::post('/paciente/perfil/actualizar', [GestionController::class, 'actualizarPerfilPaciente'])->name('paciente.actualizarPerfil');    // Cambiar Contraseña Paciente
+    Route::post('/paciente/contrasena/cambiar', [GestionController::class, 'cambiarContrasenaPaciente'])->name('paciente.cambiarContrasena');    // Citas de Pacientes
+    Route::get('/paciente/citas', [PacienteCitasController::class, 'index'])->name('paciente.citas.index');
     Route::get('/paciente/citas/crear', [PacienteCitasController::class, 'create'])->name('paciente.citas.create');
     Route::post('/paciente/citas', [PacienteCitasController::class, 'store'])->name('paciente.citas.store');
     Route::get('/paciente/citas/medicos-por-especialidad', [PacienteCitasController::class, 'getMedicosPorEspecialidad'])->name('paciente.citas.medicosPorEspecialidad');
     Route::get('/paciente/citas/horarios-disponibles', [PacienteCitasController::class, 'getHorariosDisponibles'])->name('paciente.citas.horariosDisponibles');
     Route::post('/paciente/citas/{id}/cancelar', [PacienteCitasController::class, 'cancelar'])->name('paciente.citas.cancelar');
+      // Reprogramar Citas
+    Route::get('/paciente/citas/{id}/reprogramar', [PacienteCitasController::class, 'reprogramar'])->name('paciente.citas.reprogramar');
+    Route::put('/paciente/citas/{id}/reprogramar', [PacienteCitasController::class, 'reprogramarUpdate'])->name('paciente.citas.reprogramar.update');
 
     // Cambiar nombre de ruta para inicio paciente
     Route::get('/paciente/inicio', [GestionController::class, 'inicioPaciente'])->name('paciente.inicio');
+
+    // Perfil de Usuario (Disponible para todos los roles)
+    Route::get('/perfil', [PerfilController::class, 'show'])->name('perfil.show');
+    Route::get('/perfil/editar', [PerfilController::class, 'edit'])->name('perfil.edit');
+    Route::put('/perfil', [PerfilController::class, 'update'])->name('perfil.update');
+    Route::get('/perfil/cambiar-contrasena', [PerfilController::class, 'showChangePasswordForm'])->name('perfil.change-password');
+    Route::put('/perfil/cambiar-contrasena', [PerfilController::class, 'changePassword'])->name('perfil.change-password.update');
 
     // Citas
     Route::get('/citas', [CitaController::class, 'index'])->name('citas.index');

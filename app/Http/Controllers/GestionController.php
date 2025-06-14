@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Clinica;
+use App\Models\PacienteExpediente;
 
 class GestionController extends Controller
 {
@@ -168,5 +169,56 @@ class GestionController extends Controller
     public function listarClinicas(Request $request)
     {
         abort(404);
+    }
+
+    // Mostrar todos los expedientes médicos del paciente
+    public function expedientesPaciente()
+    {
+        $usuario = auth()->user();
+        
+        // Obtener todas las citas del paciente con sus relaciones
+        $expedientes = \App\Models\Cita::where('paciente_id', $usuario->id)
+            ->where('estado', 'aprobada') // Solo citas aprobadas tienen expedientes médicos
+            ->with([
+                'medico.usuario', 
+                'medico.especialidades', 
+                'clinica',
+                'medicalNotes' // Relación con las notas médicas
+            ])
+            ->orderBy('fecha', 'desc')
+            ->orderBy('hora', 'desc')
+            ->get();
+        
+        // Calcular estadísticas
+        $totalConsultas = $expedientes->count();
+        
+        $especialidadesVisitadas = $expedientes->pluck('medico.especialidades')
+            ->flatten()
+            ->pluck('especialidad')
+            ->unique()
+            ->count();
+        
+        $medicosVisitados = $expedientes->pluck('medico.id')
+            ->unique()
+            ->count();
+        
+        return view('paciente.expedientes', compact(
+            'expedientes',
+            'totalConsultas',
+            'especialidadesVisitadas', 
+            'medicosVisitados'
+        ));
+    }
+
+    public function expedientePersonal()
+    {
+        $usuario = auth()->user();
+        
+        // Obtener el expediente personal del paciente
+        $expedientePersonal = PacienteExpediente::where('id_paciente', $usuario->id)
+            ->with('medico.usuario')
+            ->first();
+
+        return view('paciente.expediente_personal', compact('expedientePersonal'));
     }
 }

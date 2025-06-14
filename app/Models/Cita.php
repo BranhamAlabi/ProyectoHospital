@@ -114,8 +114,8 @@ class Cita extends Model
         return $query->where('estado', 'cancelada');
     }
 
-    public function notasMedicas()
+    public function medicalNotes()
     {
-        return $this->hasOne(MedicalNote::class, 'cita_id');
+        return $this->hasMany(MedicalNote::class, 'cita_id');
     }
 }

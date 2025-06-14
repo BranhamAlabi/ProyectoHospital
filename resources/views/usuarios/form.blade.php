@@ -35,7 +35,7 @@
     </style>
 </head>
 <body>
-    @include('Plantillas.navgestion')
+    @include('Plantillas.navmoderador')
 
     <div class="container">
         <div class="form-container">

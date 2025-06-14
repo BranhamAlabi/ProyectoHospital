@@ -8,15 +8,18 @@
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
         <li class="nav-item">
           <a class="nav-link" href="{{ route('gestion.inicioPaciente') }}">Inicio</a>
+        </li>        <li class="nav-item">
+          <a class="nav-link" href="{{ route('paciente.citas.index') }}">Mis Citas</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="{{ route('citas.index') }}">Mis Citas</a>
+          <a class="nav-link" href="{{ route('paciente.expedientes') }}">Mis expedientes</a>
+        </li>        <li class="nav-item">
+          <a class="nav-link" href="{{ route('paciente.expediente.personal') }}">Expediente Personal</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="{{ route('paciente.expediente') }}">Expediente Médico</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="{{ route('paciente.notificaciones') }}">Notificaciones</a>
+          <a class="nav-link" href="{{ route('perfil.show') }}">
+            <i class="fas fa-user-circle"></i> Mi Perfil
+          </a>
         </li>
       </ul>
       <form method="POST" action="{{ route('logout') }}">

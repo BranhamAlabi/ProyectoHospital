@@ -1,12 +1,9 @@
 @extends('Plantillas.sesion')
 
 @section('Contenido')
-@include('Plantillas.navgestion')
+@include('Plantillas.navmoderador')
 
 <div class="container py-4">
-  <header class="bg-primary text-white p-3 mb-4" style="font-family: 'Impact', sans-serif; font-size: 1.5rem;">
-    <img style="width: 5rem;" src="{{ asset('image/meditech_logo.png') }}" alt="logo">
-  </header>
 
   <div class="bg-secondary text-white rounded p-4 shadow-sm">
     <h4>Detalle de Usuario</h4>

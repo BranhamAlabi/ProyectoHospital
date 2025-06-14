@@ -62,7 +62,7 @@
                 <tr>
                 <td>{{ ucfirst($cita->estado) }}</td>
                 <td>{{ $cita->paciente->nombre ?? 'N/A' }}</td>
-                <td>{{ $cita->medico->nombre ?? 'N/A' }}</td>
+                <td>{{ $cita->medico->usuario->nombre ?? 'N/A' }}</td>
                 <td>{{ $cita->clinica->nombre ?? 'N/A' }}</td>
                 <td>{{ $cita->fecha }}</td>
                 <td>{{ $cita->hora }}</td>

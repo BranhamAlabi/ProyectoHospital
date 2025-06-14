@@ -17,9 +17,13 @@
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="{{ route('citas.index') }}">Gestión de Citas</a>
+                </li>                <li class="nav-item">
+                    <a class="nav-link" href="{{ route('medicos.index') }}">Gestión de Médicos</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="{{ route('medicos.index') }}">Gestión de Médicos</a>
+                    <a class="nav-link" href="{{ route('perfil.show') }}">
+                        <i class="fas fa-user-circle"></i> Mi Perfil
+                    </a>
                 </li>
             </ul>
             <form method="POST" action="{{ route('logout') }}">
