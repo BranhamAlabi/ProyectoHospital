@@ -98,5 +98,41 @@ class CitaController extends Controller
         // Registrar auditoría y enviar notificaciones (pendiente implementar)
 
         return redirect()->route('citas.show', $cita->id)->with('success', 'Estado de la cita actualizado correctamente.');
+    }    // Método específico para que los médicos actualicen el estado de sus citas
+    public function actualizarEstado(Request $request, $id)
+    {
+        $request->validate([
+            'estado' => 'required|in:Pendiente,Confirmada,Cancelada,Pendiente_reprogramacion',
+            'comentarios' => 'nullable|string',
+        ]);
+
+        $cita = Cita::with(['paciente', 'medico'])->findOrFail($id);
+
+        // Verificar que el médico autenticado es el propietario de la cita
+        // El medico_id en la tabla citas debe coincidir con el usuario autenticado
+        if ($cita->medico_id !== Auth::id()) {
+            return response()->json(['message' => 'No tienes permisos para actualizar esta cita'], 403);
+        }
+
+        $estadoAnterior = $cita->estado;
+        $cita->estado = $request->estado;
+        $cita->comentarios = $request->comentarios;
+        $cita->updated_by = Auth::id();
+        $cita->save();
+
+        // Si la cita se confirma, preparar para mostrar modal de expediente
+        if ($request->estado === 'Confirmada' && $estadoAnterior !== 'Confirmada') {
+            return response()->json([
+                'success' => true,
+                'message' => 'Cita confirmada correctamente',
+                'mostrar_expediente' => true,
+                'cita_id' => $cita->id
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Estado de la cita actualizado correctamente'
+        ]);
     }
 }

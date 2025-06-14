@@ -3,46 +3,81 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Models\Clinica;
 
 class GestionController extends Controller
 {
     public function inicio()
     {
         return view('gestion.inicio');
-    }
-
-    public function inicioPaciente()
+    }    public function inicioPaciente()
     {
-        $usuario = auth()->user();
-
-        // Obtener citas próximas y pasadas con estado
+        $usuario = auth()->user();        // Obtener citas próximas y pasadas con relaciones
         $citasProximas = \App\Models\Cita::where('paciente_id', $usuario->id)
             ->where('fecha', '>=', now()->toDateString())
+            ->with(['medico.usuario', 'medico.especialidades', 'clinica'])
             ->orderBy('fecha')
             ->orderBy('hora')
             ->get();
 
         $citasPasadas = \App\Models\Cita::where('paciente_id', $usuario->id)
             ->where('fecha', '<', now()->toDateString())
+            ->with(['medico.usuario', 'medico.especialidades', 'clinica'])
             ->orderBy('fecha', 'desc')
             ->orderBy('hora', 'desc')
             ->get();
 
+        // Calcular estadísticas
+        $citasAprobadas = \App\Models\Cita::where('paciente_id', $usuario->id)
+            ->where('estado', 'aprobada')
+            ->count();
+
+        $citasPendientes = \App\Models\Cita::where('paciente_id', $usuario->id)
+            ->where('estado', 'pendiente')
+            ->count();
+
+        $citasCanceladas = \App\Models\Cita::where('paciente_id', $usuario->id)
+            ->where('estado', 'cancelada')
+            ->count();
+
+        // Calcular porcentaje de asistencia
+        $porcentajeAsistencia = \App\Models\Cita::calcularPorcentajeAsistencia($usuario->id);
+
         // Obtener notificaciones no leídas
-        $notificaciones = \App\Models\Notification::where('usuario_id', $usuario->id)
-            ->noLeidas()
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $notificaciones = collect(); // Temporal hasta implementar notificaciones
+        try {
+            $notificaciones = \App\Models\Notification::where('usuario_id', $usuario->id)
+                ->noLeidas()
+                ->orderBy('created_at', 'desc')
+                ->get();
+        } catch (\Exception $e) {
+            // Si no existe la tabla de notificaciones aún
+        }
 
         // Obtener datos del perfil
         $perfil = $usuario;
 
         // Obtener expediente médico (simplificado)
-        $expediente = \App\Models\MedicalNote::where('paciente_id', $usuario->id)
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $expediente = collect(); // Temporal hasta implementar expediente
+        try {
+            $expediente = \App\Models\MedicalNote::where('paciente_id', $usuario->id)
+                ->orderBy('created_at', 'desc')
+                ->get();
+        } catch (\Exception $e) {
+            // Si no existe la tabla de expediente aún
+        }
 
-        return view('gestion.inicio_paciente', compact('citasProximas', 'citasPasadas', 'notificaciones', 'perfil', 'expediente'));
+        return view('gestion.inicio_paciente', compact(
+            'citasProximas', 
+            'citasPasadas', 
+            'citasAprobadas',
+            'citasPendientes', 
+            'citasCanceladas',
+            'porcentajeAsistencia',
+            'notificaciones', 
+            'perfil', 
+            'expediente'
+        ));
     }
 
     public function expedientePaciente()
@@ -127,5 +162,11 @@ class GestionController extends Controller
         $usuario->save();
 
         return redirect()->back()->with('success', 'Contraseña cambiada correctamente.');
+    }
+
+    // New method to list clinics with filters
+    public function listarClinicas(Request $request)
+    {
+        abort(404);
     }
 }

@@ -1,20 +1,25 @@
 @extends('Plantillas.sesion')
 
 @section('Contenido')
-@include('Plantillas.navmoderador')
+@if(in_array(session('usuario_rol'), ['administrador', 'moderador']))
+    @include('Plantillas.navmoderador')
+@endif
 
 <div class="container mt-4">
-    <h2>Agregar Médico</h2>
-
-    @if ($errors->any())
-        <div class="alert alert-danger">
-            <ul>
-                @foreach ($errors->all() as $error)
-                    <li>{{ $error }}</li>
-                @endforeach
-            </ul>
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h2 class="mb-0">Agregar Médico</h2>
         </div>
-    @endif
+        <div class="card-body">
+            @if ($errors->any())
+                <div class="alert alert-danger">
+                    <ul class="mb-0">
+                        @foreach ($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
 
     <form action="{{ route('medicos.store') }}" method="POST">
         @csrf

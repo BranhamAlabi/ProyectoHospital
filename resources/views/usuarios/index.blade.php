@@ -7,7 +7,6 @@
   <header class="bg-dark text-white p-3 mb-4" style="font-family: 'Impact', sans-serif; font-size: 1.5rem;">
     <img style="width: 5rem;" src="{{ asset('image/meditech_logo.png') }}" alt="logo">
   </header>
-
   <div class="mb-3">
     <a href="{{ route('usuarios.create') }}" class="btn btn-success">Crear Nuevo Usuario</a>
   </div>
@@ -58,9 +57,8 @@
                 <span class="badge bg-primary text-white">{{ ucfirst($rol->nombre) }}</span>
               @endforeach
             </td>
-            <td>{{ ucfirst($usuario->estado) }}</td>
-            <td>
-                <a href="{{ route('usuarios.show', $usuario->id) }}" class="btn btn-primary btn-sm">Ver...</a>
+            <td>{{ ucfirst($usuario->estado) }}</td>            <td>
+              <a href="{{ route('usuarios.show', $usuario->id) }}" class="btn btn-primary btn-sm">Ver...</a>
             </td>
           </tr>
         @empty

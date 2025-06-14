@@ -50,53 +50,16 @@
     </div>
     @endif
 
-    <div class="row">        <!-- Calendario de citas -->
+    <div class="row">
+        <!-- Calendario de citas -->
         <div class="col-lg-8">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0">Gestión de Citas</h5>
-                </div>                <div class="card-body">
-                    <!-- Filtros de búsqueda -->
-                    <div class="filtros-container">
-                        <div class="row">
-                            <div class="col-md-3">
-                                <label class="form-label">
-                                    <i class="fas fa-user"></i> Buscar por paciente
-                                </label>
-                                <input type="text" class="form-control" id="filtro-paciente" placeholder="Nombre del paciente">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">
-                                    <i class="fas fa-filter"></i> Estado
-                                </label>                                <select class="form-select" id="filtro-estado">
-                                    <option value="">Todos los estados</option>
-                                    <option value="pendiente">Pendiente</option>
-                                    <option value="aprobada">Aprobada</option>
-                                    <option value="cancelada">Cancelada</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">
-                                    <i class="fas fa-calendar"></i> Fecha
-                                </label>
-                                <input type="date" class="form-control" id="filtro-fecha">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">
-                                    <i class="fas fa-cogs"></i> Acciones
-                                </label>
-                                <div class="d-flex gap-2">
-                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="limpiarFiltros()">
-                                        <i class="fas fa-eraser"></i> Limpiar
-                                    </button>
-                                    <button type="button" class="btn btn-primary btn-sm" onclick="aplicarFiltros()">
-                                        <i class="fas fa-search"></i> Filtrar
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div><div class="table-responsive">
-                        <table class="table table-hover" id="tabla-citas">
+                    <h5 class="mb-0">Citas del Día</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
                             <thead>
                                 <tr>
                                     <th>Fecha</th>
@@ -113,14 +76,10 @@
                                     <td>{{ \Carbon\Carbon::parse($cita->fecha)->format('d/m/Y') }}</td>
                                     <td>{{ \Carbon\Carbon::parse($cita->hora)->format('H:i') }}</td>
                                     <td>{{ $cita->paciente->nombre }}</td>
-                                    <td>{{ $cita->motivo }}</td>                                    <td>
-                                        <span class="badge bg-{{ 
-                                            $cita->estado == 'Confirmada' ? 'success' : 
-                                            ($cita->estado == 'Pendiente' ? 'warning' : 
-                                            ($cita->estado == 'Cancelada' ? 'danger' : 
-                                            ($cita->estado == 'Pendiente_reprogramacion' ? 'info' : 'secondary'))) 
-                                        }}">
-                                            {{ $cita->estado == 'Pendiente_reprogramacion' ? 'Pendiente reprogramación' : $cita->estado }}
+                                    <td>{{ $cita->motivo }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ $cita->estado == 'Confirmada' ? 'success' : ($cita->estado == 'Pendiente' ? 'warning' : 'danger') }}">
+                                            {{ $cita->estado }}
                                         </span>
                                     </td>
                                     <td>
@@ -209,18 +168,18 @@
             <div class="card mb-3">
                 <div class="card-header">
                     <h6 class="mb-0"><i class="fas fa-chart-pie"></i> Resumen de Hoy</h6>
-                </div>                <div class="card-body">
+                </div>
+                <div class="card-body">
                     @php
                         $citasHoy = $citas->filter(function($cita) {
                             return \Carbon\Carbon::parse($cita->fecha)->isToday();
                         });
-                        $pendientes = $citasHoy->where('estado', 'Pendiente')->count();
-                        $confirmadas = $citasHoy->where('estado', 'Confirmada')->count();
-                        $pendientesReprogramacion = $citasHoy->where('estado', 'Pendiente_reprogramacion')->count();
-                        $canceladas = $citasHoy->where('estado', 'Cancelada')->count();
+                        $pendientes = $citasHoy->where('estado', 'pendiente')->count();
+                        $confirmadas = $citasHoy->where('estado', 'confirmada')->count();
+                        $completadas = $citasHoy->where('estado', 'completada')->count();
                     @endphp
                     <div class="row text-center">
-                        <div class="col-3">
+                        <div class="col-4">
                             <div class="text-warning">
                                 <i class="fas fa-clock fa-2x"></i>
                                 <div class="mt-1">
@@ -229,7 +188,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-3">
+                        <div class="col-4">
                             <div class="text-success">
                                 <i class="fas fa-check-circle fa-2x"></i>
                                 <div class="mt-1">
@@ -238,21 +197,12 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-3">
-                            <div class="text-info">
-                                <i class="fas fa-calendar-alt fa-2x"></i>
+                        <div class="col-4">
+                            <div class="text-primary">
+                                <i class="fas fa-calendar-check fa-2x"></i>
                                 <div class="mt-1">
-                                    <strong>{{ $pendientesReprogramacion }}</strong><br>
-                                    <small>Pendiente reprogramación</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-3">
-                            <div class="text-danger">
-                                <i class="fas fa-times-circle fa-2x"></i>
-                                <div class="mt-1">
-                                    <strong>{{ $canceladas }}</strong><br>
-                                    <small>Canceladas</small>
+                                    <strong>{{ $completadas }}</strong><br>
+                                    <small>Completadas</small>
                                 </div>
                             </div>
                         </div>
@@ -263,34 +213,6 @@
     </div>
 </div>
 @endsection
-
-@push('styles')
-<style>
-.filtros-container {
-    background-color: #f8f9fa;
-    border-radius: 8px;
-    padding: 15px;
-    margin-bottom: 20px;
-    border: 1px solid #dee2e6;
-}
-
-.badge {
-    font-size: 0.75em;
-}
-
-#contador-resultados {
-    font-style: italic;
-}
-
-.table-hover tbody tr:hover {
-    background-color: rgba(0, 123, 255, 0.05);
-}
-
-.btn-sm {
-    font-size: 0.8rem;
-}
-</style>
-@endpush
 
 @push('scripts')
 <script>
@@ -313,30 +235,29 @@ document.addEventListener('DOMContentLoaded', function() {
                         'Accept': 'application/json'
                     }
                 });
-                  const result = await response.json();
                 
-                if (response.ok && result.success) {
+                const result = await response.json();
+                
+                if (response.ok) {
                     // Cerrar el modal de actualización
                     const actualizarModal = bootstrap.Modal.getInstance(document.getElementById('actualizarCitaModal' + citaId));
                     if (actualizarModal) {
                         actualizarModal.hide();
                     }
                     
-                    // Mostrar mensaje de éxito
-                    alert(result.message || 'Cita actualizada correctamente');
-                    
-                    // Si se debe mostrar el modal de expediente
-                    if (result.mostrar_expediente) {
-                        setTimeout(() => {
-                            const expedienteModal = new bootstrap.Modal(document.getElementById('expedienteMedicoModal' + citaId));
-                            expedienteModal.show();
-                        }, 500);
+                    // Si el estado es "Confirmada", mostrar el modal de expediente
+                    if (estado === 'Confirmada') {
+                        const expedienteModal = new bootstrap.Modal(document.getElementById('expedienteMedicoModal' + citaId));
+                        expedienteModal.show();
                     } else {
-                        // Solo recargar si no se va a mostrar el modal de expediente
+                        // Solo recargar si no es confirmada
                         setTimeout(() => {
                             window.location.reload();
-                        }, 1000);
+                        }, 500);
                     }
+                    
+                    // Mostrar mensaje de éxito
+                    alert(result.message || 'Cita actualizada correctamente');
                 } else {
                     throw new Error(result.message || 'Error al actualizar la cita');
                 }
@@ -345,125 +266,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert(error.message || 'Error al actualizar la cita');
             }
         });
-    });    // Mostrar modal de expediente si viene de redirección
+    });
+
+    // Mostrar modal de expediente si viene de redirección
     @if(session()->has('mostrar_expediente') && session()->has('cita_id'))
         const expedienteModal = new bootstrap.Modal(document.getElementById('expedienteMedicoModal{{ session('cita_id') }}'));
         expedienteModal.show();
     @endif
-});
-
-// Funciones para filtros de citas
-function aplicarFiltros() {
-    const filtroPaciente = document.getElementById('filtro-paciente').value.toLowerCase();
-    const filtroEstado = document.getElementById('filtro-estado').value;
-    const filtroFecha = document.getElementById('filtro-fecha').value;
-    
-    const tabla = document.getElementById('tabla-citas');
-    const filas = tabla.querySelectorAll('tbody tr');
-    
-    filas.forEach(fila => {
-        // Obtener datos de la fila (excluyendo modales)
-        if (fila.style.display === 'none' || fila.querySelector('.modal')) {
-            return; // Saltar modales y filas ya ocultas
-        }
-        
-        const celdas = fila.querySelectorAll('td');
-        if (celdas.length < 5) return; // Saltar si no tiene suficientes celdas
-        
-        const fechaCita = celdas[0].textContent.trim();
-        const paciente = celdas[2].textContent.toLowerCase().trim();
-        const estadoBadge = celdas[4].querySelector('.badge');
-        const estado = estadoBadge ? estadoBadge.textContent.trim() : '';
-        
-        let mostrar = true;
-        
-        // Filtro por paciente
-        if (filtroPaciente && !paciente.includes(filtroPaciente)) {
-            mostrar = false;
-        }
-        
-        // Filtro por estado
-        if (filtroEstado && estado !== filtroEstado) {
-            mostrar = false;
-        }
-        
-        // Filtro por fecha
-        if (filtroFecha) {
-            const fechaFiltro = new Date(filtroFecha);
-            const fechaCitaParts = fechaCita.split('/');
-            const fechaCitaDate = new Date(fechaCitaParts[2], fechaCitaParts[1] - 1, fechaCitaParts[0]);
-            
-            if (fechaCitaDate.toDateString() !== fechaFiltro.toDateString()) {
-                mostrar = false;
-            }
-        }
-        
-        fila.style.display = mostrar ? '' : 'none';
-    });
-    
-    // Actualizar contador de resultados
-    actualizarContadorResultados();
-}
-
-function limpiarFiltros() {
-    document.getElementById('filtro-paciente').value = '';
-    document.getElementById('filtro-estado').value = '';
-    document.getElementById('filtro-fecha').value = '';
-    
-    // Mostrar todas las filas
-    const tabla = document.getElementById('tabla-citas');
-    const filas = tabla.querySelectorAll('tbody tr');
-    
-    filas.forEach(fila => {
-        if (!fila.querySelector('.modal')) {
-            fila.style.display = '';
-        }
-    });
-    
-    actualizarContadorResultados();
-}
-
-function actualizarContadorResultados() {
-    const tabla = document.getElementById('tabla-citas');
-    const filasVisibles = Array.from(tabla.querySelectorAll('tbody tr')).filter(fila => 
-        fila.style.display !== 'none' && !fila.querySelector('.modal')
-    );
-    
-    // Crear o actualizar el contador si no existe
-    let contador = document.getElementById('contador-resultados');
-    if (!contador) {
-        contador = document.createElement('div');
-        contador.id = 'contador-resultados';
-        contador.className = 'text-muted mb-2';
-        tabla.parentNode.insertBefore(contador, tabla);
-    }
-    
-    contador.innerHTML = `<small><i class="fas fa-info-circle"></i> Mostrando ${filasVisibles.length} cita(s)</small>`;
-}
-
-// Aplicar filtros al escribir (con debounce)
-let timeoutId;
-document.addEventListener('DOMContentLoaded', function() {
-    const filtroPaciente = document.getElementById('filtro-paciente');
-    if (filtroPaciente) {
-        filtroPaciente.addEventListener('input', function() {
-            clearTimeout(timeoutId);
-            timeoutId = setTimeout(aplicarFiltros, 300);
-        });
-    }
-    
-    const filtroEstado = document.getElementById('filtro-estado');
-    if (filtroEstado) {
-        filtroEstado.addEventListener('change', aplicarFiltros);
-    }
-    
-    const filtroFecha = document.getElementById('filtro-fecha');
-    if (filtroFecha) {
-        filtroFecha.addEventListener('change', aplicarFiltros);
-    }
-    
-    // Inicializar contador
-    actualizarContadorResultados();
 });
 </script>
 @endpush

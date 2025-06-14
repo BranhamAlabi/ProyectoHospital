@@ -59,7 +59,10 @@
             <textarea name="comentarios" id="comentarios" class="form-control" rows="3">{{ old('comentarios', $cita->comentarios) }}</textarea>
         </div>
 
-        <button type="submit" class="btn btn-primary">Actualizar</button>
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">Actualizar</button>
+            <a href="{{ route('citas.index') }}" class="btn btn-secondary">Volver</a>
+        </div>
     </form>
 
     {{-- Aquí se podría mostrar el historial de cambios para auditoría --}}

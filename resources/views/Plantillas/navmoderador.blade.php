@@ -13,7 +13,7 @@
                     <a class="nav-link" href="{{ route('usuarios.index') }}">Gestión de Usuarios</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="{{ route('clinica.show') }}">Gestión de Clínicas</a>
+                    <a class="nav-link" href="{{ route('clinica.index') }}">Gestión de Clínicas</a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="{{ route('citas.index') }}">Gestión de Citas</a>

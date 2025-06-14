@@ -6,7 +6,16 @@
 <div class="container mt-4">
     <h2>Listado de Médicos</h2>
 
-    <a href="{{ route('medicos.create') }}" class="btn btn-success mb-3">Asignar Médico</a>
+    @php
+        $userRoles = session('usuario_rol', []);
+        if (!is_array($userRoles)) {
+            $userRoles = [$userRoles];
+        }
+    @endphp
+
+    @if(array_intersect($userRoles, ['administrador', 'moderador']))
+        <a href="{{ route('medicos.create') }}" class="btn btn-success mb-3">Asignar Médico</a>
+    @endif
 
     <form method="GET" action="{{ route('medicos.index') }}" class="row g-3 mb-4">
         <div class="col-md-3">

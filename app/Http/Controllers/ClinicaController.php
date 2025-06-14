@@ -7,64 +7,95 @@ use App\Models\Clinica;
 
 class ClinicaController extends Controller
 {
-    // Mostrar información de la clínica
-    public function show()
+    public function __construct()
     {
-        $clinica = Clinica::first();
-
-        $rolActual = session('usuario_rol');
-
-        // Moderadores solo pueden ver (read-only)
-        $readOnly = ($rolActual === 'moderador');
-
-        return view('clinica.show', compact('clinica', 'readOnly'));
+        // No necesitamos middleware aquí, lo manejamos en las rutas
     }
 
-    // Mostrar formulario para editar (solo admin)
-    public function edit()
+    public function index(Request $request)
     {
-        $rolActual = session('usuario_rol');
+        $query = Clinica::query();
 
-        if ($rolActual !== 'administrador') {
-            return redirect()->route('clinica.show')->withErrors('No tienes permiso para editar la información de la clínica.');
+        if ($request->filled('nombre')) {
+            $query->where('nombre', 'like', '%' . $request->nombre . '%');
         }
 
-        $clinica = Clinica::first();
+        if ($request->filled('estado')) {
+            $query->where('estado', $request->estado);
+        }
 
+        $clinicas = $query->orderBy('nombre')->get();
+        $rolActual = session('usuario_rol');
+
+        return view('clinica.index', compact('clinicas', 'rolActual'));
+    }
+
+    public function create()
+    {
+        return view('clinica.create');
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'nombre' => 'required|string|max:255',
+            'direccion' => 'nullable|string|max:255',
+            'telefono' => 'nullable|string|max:50',
+            'correo' => 'nullable|email|max:255',
+            'responsable' => 'nullable|string|max:255',
+            'estado' => 'required|in:activo,inactivo'
+        ]);
+
+        try {
+            Clinica::create($validated);
+            return redirect()->route('clinica.index')->with('success', 'Clínica creada correctamente.');
+        } catch (\Exception $e) {
+            return redirect()->route('clinica.index')->withErrors('Error al crear la clínica.');
+        }
+    }
+
+    public function show($id)
+    {
+        $clinica = Clinica::findOrFail($id);
+        $rolActual = session('usuario_rol');
+        return view('clinica.show', compact('clinica', 'rolActual'));
+    }
+
+    public function edit($id)
+    {
+        $clinica = Clinica::findOrFail($id);
         return view('clinica.edit', compact('clinica'));
     }
 
-    // Actualizar información de la clínica (solo admin)
-    public function update(Request $request)
+    public function update(Request $request, $id)
     {
-        $rolActual = session('usuario_rol');
-
-        if ($rolActual !== 'administrador') {
-            return redirect()->route('clinica.show')->withErrors('No tienes permiso para actualizar la información de la clínica.');
-        }
-
         $validated = $request->validate([
             'nombre' => 'required|string|max:255',
-            'direccion' => 'required|string|max:255',
-            'telefono' => 'required|string|max:50',
-            'email' => 'required|email|max:255',
-            'responsable' => 'required|string|max:255',
+            'direccion' => 'nullable|string|max:255',
+            'telefono' => 'nullable|string|max:50',
+            'correo' => 'nullable|email|max:255',
+            'responsable' => 'nullable|string|max:255',
+            'estado' => 'required|in:activo,inactivo'
         ]);
 
-        $clinica = Clinica::first();
-
-        if (!$clinica) {
-            $clinica = new Clinica();
+        $clinica = Clinica::findOrFail($id);
+        
+        try {
+            $clinica->update($validated);
+            return redirect()->route('clinica.index')->with('success', 'Información de la clínica actualizada correctamente.');
+        } catch (\Exception $e) {
+            return redirect()->route('clinica.index')->withErrors('Error al actualizar la información de la clínica.');
         }
+    }
 
-        $clinica->nombre = $validated['nombre'];
-        $clinica->direccion = $validated['direccion'];
-        $clinica->telefono = $validated['telefono'];
-        $clinica->email = $validated['email'];
-        $clinica->responsable = $validated['responsable'];
-
-        $clinica->save();
-
-        return redirect()->route('clinica.show')->with('success', 'Información de la clínica actualizada correctamente.');
+    public function destroy($id)
+    {
+        try {
+            $clinica = Clinica::findOrFail($id);
+            $clinica->delete();
+            return redirect()->route('clinica.index')->with('success', 'Clínica eliminada correctamente.');
+        } catch (\Exception $e) {
+            return redirect()->route('clinica.index')->withErrors('Error al eliminar la clínica.');
+        }
     }
 }

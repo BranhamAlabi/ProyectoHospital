@@ -56,83 +56,190 @@
                 <div class="card-header">
                     <h5 class="mb-0">Gestión de Citas</h5>
                 </div>                <div class="card-body">
-                    <!-- Filtros de búsqueda -->
-                    <div class="filtros-container">
-                        <div class="row">
-                            <div class="col-md-3">
+                    <!-- Filtros mejorados -->
+                    <form method="GET" action="{{ route('medico.inicio') }}" class="mb-4">
+                        <div class="row g-3">
+                            <div class="col-md-4">
                                 <label class="form-label">
-                                    <i class="fas fa-user"></i> Buscar por paciente
+                                    <i class="fas fa-filter"></i> Estado de citas
                                 </label>
-                                <input type="text" class="form-control" id="filtro-paciente" placeholder="Nombre del paciente">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">
-                                    <i class="fas fa-filter"></i> Estado
-                                </label>                                <select class="form-select" id="filtro-estado">
-                                    <option value="">Todos los estados</option>
-                                    <option value="pendiente">Pendiente</option>
-                                    <option value="aprobada">Aprobada</option>
-                                    <option value="cancelada">Cancelada</option>
+                                <select name="estado" class="form-select">
+                                    <option value="todas" {{ $filtroEstado == 'todas' ? 'selected' : '' }}>Todas las citas</option>
+                                    <option value="aprobada" {{ $filtroEstado == 'aprobada' ? 'selected' : '' }}>Aprobadas</option>
+                                    <option value="pendiente" {{ $filtroEstado == 'pendiente' ? 'selected' : '' }}>Pendientes</option>
+                                    <option value="cancelada" {{ $filtroEstado == 'cancelada' ? 'selected' : '' }}>Canceladas</option>
                                 </select>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-4">
                                 <label class="form-label">
-                                    <i class="fas fa-calendar"></i> Fecha
+                                    <i class="fas fa-calendar"></i> Período
                                 </label>
-                                <input type="date" class="form-control" id="filtro-fecha">
+                                <select name="fecha" class="form-select">
+                                    <option value="proximas" {{ $filtroFecha == 'proximas' ? 'selected' : '' }}>Próximas citas</option>
+                                    <option value="hoy" {{ $filtroFecha == 'hoy' ? 'selected' : '' }}>Solo hoy</option>
+                                    <option value="semana" {{ $filtroFecha == 'semana' ? 'selected' : '' }}>Esta semana</option>
+                                    <option value="pasadas" {{ $filtroFecha == 'pasadas' ? 'selected' : '' }}>Citas pasadas</option>
+                                </select>
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label">
-                                    <i class="fas fa-cogs"></i> Acciones
-                                </label>
+                            <div class="col-md-4">
+                                <label class="form-label">&nbsp;</label>
                                 <div class="d-flex gap-2">
-                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="limpiarFiltros()">
-                                        <i class="fas fa-eraser"></i> Limpiar
-                                    </button>
-                                    <button type="button" class="btn btn-primary btn-sm" onclick="aplicarFiltros()">
+                                    <button type="submit" class="btn btn-primary">
                                         <i class="fas fa-search"></i> Filtrar
                                     </button>
+                                    <a href="{{ route('medico.inicio') }}" class="btn btn-outline-secondary">
+                                        <i class="fas fa-refresh"></i> Limpiar
+                                    </a>
                                 </div>
                             </div>
-                        </div>
-                    </div><div class="table-responsive">
+                        </div>                    </form>
+
+                    <!-- Resumen de citas encontradas -->
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle"></i> 
+                        Mostrando <strong>{{ $citas->count() }}</strong> citas
+                        @if($filtroEstado !== 'todas')
+                            con estado <strong>{{ $filtroEstado }}</strong>
+                        @endif
+                        @if($filtroFecha !== 'proximas')
+                            para <strong>
+                                @switch($filtroFecha)
+                                    @case('hoy') hoy @break
+                                    @case('semana') esta semana @break
+                                    @case('pasadas') fechas pasadas @break
+                                @endswitch
+                            </strong>
+                        @endif
+                    </div>
+
+                    <div class="table-responsive">
                         <table class="table table-hover" id="tabla-citas">
-                            <thead>
+                            <thead class="table-dark">
                                 <tr>
-                                    <th>Fecha</th>
-                                    <th>Hora</th>
-                                    <th>Paciente</th>
-                                    <th>Motivo</th>
-                                    <th>Estado</th>
-                                    <th>Acciones</th>
+                                    <th><i class="fas fa-calendar"></i> Fecha</th>
+                                    <th><i class="fas fa-clock"></i> Hora</th>
+                                    <th><i class="fas fa-user"></i> Paciente</th>
+                                    <th><i class="fas fa-notes-medical"></i> Motivo</th>
+                                    <th><i class="fas fa-flag"></i> Estado</th>
+                                    <th><i class="fas fa-cogs"></i> Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach($citas as $cita)
-                                <tr>
-                                    <td>{{ \Carbon\Carbon::parse($cita->fecha)->format('d/m/Y') }}</td>
+                                @forelse($citas as $cita)                                <tr class="
+                                    @if($cita->fecha == now()->toDateString()) table-warning
+                                    @elseif($cita->fecha < now()->toDateString()) table-light
+                                    @endif
+                                ">
+                                    <td>
+                                        {{ \Carbon\Carbon::parse($cita->fecha)->format('d/m/Y') }}
+                                        @if($cita->fecha == now()->toDateString())
+                                            <span class="badge bg-warning text-dark ms-1">HOY</span>
+                                        @endif
+                                    </td>
                                     <td>{{ \Carbon\Carbon::parse($cita->hora)->format('H:i') }}</td>
-                                    <td>{{ $cita->paciente->nombre }}</td>
-                                    <td>{{ $cita->motivo }}</td>                                    <td>
-                                        <span class="badge bg-{{ 
-                                            $cita->estado == 'Confirmada' ? 'success' : 
-                                            ($cita->estado == 'Pendiente' ? 'warning' : 
-                                            ($cita->estado == 'Cancelada' ? 'danger' : 
-                                            ($cita->estado == 'Pendiente_reprogramacion' ? 'info' : 'secondary'))) 
-                                        }}">
-                                            {{ $cita->estado == 'Pendiente_reprogramacion' ? 'Pendiente reprogramación' : $cita->estado }}
+                                    <td>
+                                        <strong>{{ $cita->paciente->nombre }}</strong>
+                                        <br><small class="text-muted">{{ $cita->paciente->correo }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="d-inline-block text-truncate" style="max-width: 200px;" title="{{ $cita->motivo }}">
+                                            {{ $cita->motivo }}
                                         </span>
                                     </td>
                                     <td>
-                                        <button type="button" 
-                                                class="btn btn-primary btn-sm btn-actualizar" 
-                                                data-cita-id="{{ $cita->id }}"
-                                                data-bs-toggle="modal" 
-                                                data-bs-target="#actualizarCitaModal{{ $cita->id }}">
-                                            Actualizar
-                                        </button>
+                                        <span class="badge bg-{{ 
+                                            $cita->estado == 'aprobada' ? 'success' : 
+                                            ($cita->estado == 'pendiente' ? 'warning' : 
+                                            ($cita->estado == 'cancelada' ? 'danger' : 'secondary')) 
+                                        }}">
+                                            {{ ucfirst($cita->estado) }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-outline-primary" 
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#verCitaModal{{ $cita->id }}"
+                                                    title="Ver detalles">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            @if($cita->estado !== 'cancelada')
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-outline-warning" 
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#actualizarCitaModal{{ $cita->id }}"
+                                                    title="Actualizar estado">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            @endif                                        </div>
                                     </td>
                                 </tr>
+
+                                <!-- Modal Ver Cita -->
+                                <div class="modal fade" id="verCitaModal{{ $cita->id }}" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Detalles de la Cita</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p><strong>Paciente:</strong> {{ $cita->paciente->nombre }}</p>
+                                                <p><strong>Fecha:</strong> {{ \Carbon\Carbon::parse($cita->fecha)->format('d/m/Y') }}</p>
+                                                <p><strong>Hora:</strong> {{ \Carbon\Carbon::parse($cita->hora)->format('H:i') }}</p>
+                                                <p><strong>Clínica:</strong> {{ $cita->clinica->nombre ?? 'N/A' }}</p>
+                                                <p><strong>Motivo:</strong> {{ $cita->motivo }}</p>
+                                                <p><strong>Estado:</strong> <span class="badge bg-{{ 
+                                                    $cita->estado == 'aprobada' ? 'success' : 
+                                                    ($cita->estado == 'pendiente' ? 'warning' : 
+                                                    ($cita->estado == 'cancelada' ? 'danger' : 'secondary')) 
+                                                }}">{{ ucfirst($cita->estado) }}</span></p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Modal Actualizar Cita -->
+                                <div class="modal fade" id="actualizarCitaModal{{ $cita->id }}" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Actualizar Cita</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <form action="{{ route('medico.actualizarEstadoCita', $cita->id) }}" method="POST">
+                                                @csrf
+                                                <div class="modal-body">
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Estado</label>
+                                                        <select class="form-select" name="estado">
+                                                            <option value="pendiente" {{ $cita->estado == 'pendiente' ? 'selected' : '' }}>Pendiente</option>
+                                                            <option value="aprobada" {{ $cita->estado == 'aprobada' ? 'selected' : '' }}>Aprobada</option>
+                                                            <option value="cancelada" {{ $cita->estado == 'cancelada' ? 'selected' : '' }}>Cancelada</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Comentarios</label>
+                                                        <textarea class="form-control" name="comentarios" rows="3">{{ $cita->comentarios }}</textarea>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                                                    <button type="submit" class="btn btn-primary">Guardar cambios</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                                @empty
+                                <tr>
+                                    <td colspan="6" class="text-center py-4">
+                                        <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
+                                        <p class="text-muted">No se encontraron citas con los filtros seleccionados</p>
+                                    </td>
+                                </tr>
+                                @endforelse
 
                                 <!-- Modal Actualizar Cita -->
                                 <div class="modal fade" id="actualizarCitaModal{{ $cita->id }}" tabindex="-1">
@@ -190,12 +297,11 @@
                                                 <div class="modal-footer">
                                                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
                                                     <button type="submit" class="btn btn-primary">Guardar Expediente</button>
-                                                </div>
-                                            </form>
+                                                </div>                                            </form>
                                         </div>
                                     </div>
                                 </div>
-                                @endforeach
+                                @endforelse
                             </tbody>
                         </table>
                     </div>
@@ -204,58 +310,86 @@
         </div>
 
         <!-- Panel lateral -->
-        <div class="col-lg-4">
-            <!-- Resumen rápido -->
+        <div class="col-lg-4">            <!-- Resumen rápido -->
             <div class="card mb-3">
-                <div class="card-header">
-                    <h6 class="mb-0"><i class="fas fa-chart-pie"></i> Resumen de Hoy</h6>
-                </div>                <div class="card-body">
-                    @php
-                        $citasHoy = $citas->filter(function($cita) {
-                            return \Carbon\Carbon::parse($cita->fecha)->isToday();
-                        });
-                        $pendientes = $citasHoy->where('estado', 'Pendiente')->count();
-                        $confirmadas = $citasHoy->where('estado', 'Confirmada')->count();
-                        $pendientesReprogramacion = $citasHoy->where('estado', 'Pendiente_reprogramacion')->count();
-                        $canceladas = $citasHoy->where('estado', 'Cancelada')->count();
-                    @endphp
+                <div class="card-header bg-primary text-white">
+                    <h6 class="mb-0"><i class="fas fa-chart-pie"></i> Estadísticas Generales</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center mb-3">
+                        <div class="col-6">
+                            <div class="text-primary">
+                                <i class="fas fa-calendar-check fa-2x"></i>
+                                <div class="mt-1">
+                                    <strong>{{ $totalCitas }}</strong><br>
+                                    <small>Total de citas</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-warning">
+                                <i class="fas fa-calendar-day fa-2x"></i>
+                                <div class="mt-1">
+                                    <strong>{{ $citasHoy ?? 0 }}</strong><br>
+                                    <small>Citas hoy</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
                     <div class="row text-center">
-                        <div class="col-3">
+                        <div class="col-4">
+                            <div class="text-success">
+                                <i class="fas fa-check-circle fa-2x"></i>
+                                <div class="mt-1">
+                                    <strong>{{ $citasAprobadas }}</strong><br>
+                                    <small>Aprobadas</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-4">
                             <div class="text-warning">
                                 <i class="fas fa-clock fa-2x"></i>
                                 <div class="mt-1">
-                                    <strong>{{ $pendientes }}</strong><br>
+                                    <strong>{{ $citasPendientes }}</strong><br>
                                     <small>Pendientes</small>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-3">
-                            <div class="text-success">
-                                <i class="fas fa-check-circle fa-2x"></i>
-                                <div class="mt-1">
-                                    <strong>{{ $confirmadas }}</strong><br>
-                                    <small>Confirmadas</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-3">
-                            <div class="text-info">
-                                <i class="fas fa-calendar-alt fa-2x"></i>
-                                <div class="mt-1">
-                                    <strong>{{ $pendientesReprogramacion }}</strong><br>
-                                    <small>Pendiente reprogramación</small>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-3">
+                        <div class="col-4">
                             <div class="text-danger">
                                 <i class="fas fa-times-circle fa-2x"></i>
                                 <div class="mt-1">
-                                    <strong>{{ $canceladas }}</strong><br>
+                                    <strong>{{ $citasCanceladas }}</strong><br>
                                     <small>Canceladas</small>
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Accesos rápidos -->
+            <div class="card mb-3">
+                <div class="card-header bg-success text-white">
+                    <h6 class="mb-0"><i class="fas fa-bolt"></i> Accesos Rápidos</h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{{ route('medico.inicio', ['fecha' => 'hoy']) }}" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-calendar-day"></i> Ver citas de hoy
+                        </a>
+                        <a href="{{ route('medico.inicio', ['estado' => 'pendiente']) }}" class="btn btn-outline-warning btn-sm">
+                            <i class="fas fa-clock"></i> Ver citas pendientes
+                        </a>
+                        <a href="{{ route('medico.horarios') }}" class="btn btn-outline-info btn-sm">
+                            <i class="fas fa-calendar-alt"></i> Gestionar horarios
+                        </a>
+                        <a href="{{ route('medico.expedientes') }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="fas fa-folder-medical"></i> Ver expedientes
+                        </a>
                     </div>
                 </div>
             </div>

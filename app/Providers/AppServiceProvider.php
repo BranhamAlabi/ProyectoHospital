@@ -19,6 +19,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        $this->app->bind('role', function ($app) {
+            return new \App\Http\Middleware\RoleMiddleware;
+        });
     }
 }

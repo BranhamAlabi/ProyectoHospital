@@ -6,9 +6,35 @@ use App\Models\Usuarios;
 use App\Models\Rol;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-
 class UsuariosController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware(function ($request, $next) {
+            // Si es administrador, permitir todo
+            if (session('usuario_rol') === 'administrador') {
+                return $next($request);
+            }
+            
+            // Para otros roles, aplicar restricciones
+            if ($request->isMethod('post') || $request->isMethod('put') || $request->isMethod('delete')) {
+                if ($request->has('id')) {
+                    $usuario = Usuarios::find($request->id);
+                    if ($usuario && $usuario->roles->pluck('nombre')->intersect(['administrador', 'moderador'])->isNotEmpty()) {
+                        return redirect()->route('usuarios.index')
+                            ->withErrors('No tienes permisos para modificar administradores o moderadores.');
+                    }
+                }
+                if ($request->has('roles') && collect($request->roles)->intersect(['administrador', 'moderador'])->isNotEmpty()) {
+                    return redirect()->route('usuarios.index')
+                        ->withErrors('No tienes permisos para asignar roles de administrador o moderador.');
+                }
+            }
+            
+            return $next($request);
+        });
+    }
+
     public function index(Request $request)
     {
         $query = Usuarios::query();
@@ -48,16 +74,21 @@ class UsuariosController extends Controller
     // Mostrar formulario para crear usuario
     public function create()
     {
-        $rolActual = session('usuario_rol');
+        $userRoles = session('usuario_rol', []);
+        
+        // Convertir a array si es string
+        if (is_string($userRoles)) {
+            $userRoles = [$userRoles];
+        }
 
-        // For testing purposes, let's assume we're a moderador if no session is set
-        // In production, this should be properly handled by authentication middleware
-        if ($rolActual === 'moderador' || !$rolActual) {
-            $roles = Rol::whereNotIn('nombre', ['admin', 'moderador'])
-                        ->orderBy('nombre')
-                        ->get();
-        } else {
+        // Si es administrador, mostrar todos los roles
+        if (in_array('administrador', $userRoles)) {
             $roles = Rol::orderBy('nombre')->get();
+        } else {
+            // Si es moderador, mostrar solo roles que no sean admin ni moderador
+            $roles = Rol::whereNotIn('nombre', ['administrador', 'moderador'])
+                       ->orderBy('nombre')
+                       ->get();
         }
 
         return view('usuarios.form', compact('roles'));
@@ -66,12 +97,30 @@ class UsuariosController extends Controller
     // Guardar nuevo usuario
     public function store(Request $request)
     {
+        // Verificar permisos de rol
+        $userRoles = session('usuario_rol', []);
+        if (is_string($userRoles)) {
+            $userRoles = [$userRoles];
+        }
+
+        // Obtener el rol seleccionado
+        $rolSeleccionado = Rol::find($request->rol_id);
+        if (!$rolSeleccionado) {
+            return redirect()->back()->withErrors(['El rol seleccionado no es válido.']);
+        }
+
+        // Si no es administrador y trata de asignar rol de admin o moderador
+        if (!in_array('administrador', $userRoles) && 
+            in_array($rolSeleccionado->nombre, ['administrador', 'moderador'])) {
+            return redirect()->back()->withErrors(['No tienes permisos para asignar ese rol.']);
+        }
+
         $validated = $request->validate([
             'nombre' => 'required|string|max:150',
             'correo' => 'required|email|unique:usuarios,correo',
             'password' => 'required|min:8',
             'rol_id' => 'required|exists:roles,id',
-            'estado' => 'nullable|in:activo,inactivo',
+            'estado' => 'required|in:activo,inactivo',
         ]);
 
         $usuario = new Usuarios();

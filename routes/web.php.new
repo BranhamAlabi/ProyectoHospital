@@ -1,0 +1,92 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\UsuariosController;
+use App\Http\Controllers\ClinicaController;
+use App\Http\Controllers\GestionController;
+use App\Http\Controllers\CitaController;
+use App\Http\Controllers\MedicosController;
+
+Route::get('/', function () {
+    return view('welcome');
+});
+
+// Login / Logout
+Route::get('login', [AuthController::class, 'showLogin'])->name('login');
+Route::post('login', [AuthController::class, 'login'])->name('login.post');
+Route::post('logout', [AuthController::class, 'logout'])->name('logout');
+
+// Registro de Paciente
+Route::get('registrar', [AuthController::class, 'showRegister'])->name('register');
+Route::post('registrar', [AuthController::class, 'register'])->name('register.post');
+
+// Recuperación de contraseña
+Route::get('recuperar-contrasena', [AuthController::class, 'showRecuperarContrasena'])->name('password.request');
+Route::post('recuperar-contrasena', [AuthController::class, 'enviarEnlaceRecuperacion'])->name('password.email');
+Route::get('resetear-contrasena/{token}', [AuthController::class, 'showResetForm'])->name('password.reset');
+Route::post('resetear-contrasena', [AuthController::class, 'resetPassword'])->name('password.update');
+
+// Rutas protegidas por autenticación
+Route::middleware('auth')->group(function () {
+    // Rutas de clínicas visibles para todos
+    Route::get('/clinica', [ClinicaController::class, 'index'])->name('clinica.index');
+    Route::get('/clinica/{id}', [ClinicaController::class, 'show'])->name('clinica.show');
+    Route::get('/usuarios', [UsuariosController::class, 'index'])->name('usuarios.index');
+    Route::get('/usuarios/{id}', [UsuariosController::class, 'show'])->name('usuarios.show');
+
+    // Rutas que requieren ser administrador
+    Route::middleware('role:administrador')->group(function () {
+        // Rutas de clínicas solo para administradores
+        Route::get('/clinica/create', [ClinicaController::class, 'create'])->name('clinica.create');
+        Route::post('/clinica', [ClinicaController::class, 'store'])->name('clinica.store');
+        Route::get('/clinica/{id}/edit', [ClinicaController::class, 'edit'])->name('clinica.edit');
+        Route::put('/clinica/{id}', [ClinicaController::class, 'update'])->name('clinica.update');
+        Route::delete('/clinica/{id}', [ClinicaController::class, 'destroy'])->name('clinica.destroy');
+        
+        // Rutas de usuarios solo para administradores
+        Route::get('/usuarios/create', [UsuariosController::class, 'create'])->name('usuarios.create');
+        Route::post('/usuarios', [UsuariosController::class, 'store'])->name('usuarios.store');
+        Route::get('/usuarios/{id}/edit', [UsuariosController::class, 'edit'])->name('usuarios.edit');
+        Route::put('/usuarios/{id}', [UsuariosController::class, 'update'])->name('usuarios.update');
+        Route::delete('/usuarios/{id}', [UsuariosController::class, 'destroy'])->name('usuarios.destroy');
+    });
+    
+    // Gestión inicio
+    Route::get('/gestion/inicio', [GestionController::class, 'inicio'])->name('gestion.inicio');
+    Route::get('/gestion/inicio-paciente', [GestionController::class, 'inicioPaciente'])->name('gestion.inicioPaciente');
+    
+    // Expediente Médico Paciente
+    Route::get('/paciente/expediente', [GestionController::class, 'expedientePaciente'])->name('paciente.expediente');
+    Route::get('/paciente/expediente/pdf', [GestionController::class, 'expedientePacientePdf'])->name('paciente.expediente.pdf');
+
+    // Notificaciones y Perfil Paciente
+    Route::get('/paciente/notificaciones', [GestionController::class, 'notificacionesPaciente'])->name('paciente.notificaciones');
+    Route::post('/paciente/documento/subir', [GestionController::class, 'subirDocumentoPaciente'])->name('paciente.subirDocumento');
+    Route::post('/paciente/perfil/actualizar', [GestionController::class, 'actualizarPerfilPaciente'])->name('paciente.actualizarPerfil');
+    Route::post('/paciente/contrasena/cambiar', [GestionController::class, 'cambiarContrasenaPaciente'])->name('paciente.cambiarContrasena');
+
+    // Citas
+    Route::get('/citas', [CitaController::class, 'index'])->name('citas.index');
+    Route::get('/citas/{id}', [CitaController::class, 'show'])->name('citas.show');
+    Route::post('/citas/{id}/update-status', [CitaController::class, 'updateStatus'])->name('citas.updateStatus');
+
+    // Rutas de médicos
+    Route::get('/medicos', [MedicosController::class, 'index'])->name('medicos.index');
+    Route::get('/medico/inicio', [MedicosController::class, 'inicio'])->name('medico.inicio');
+    Route::get('/medico/horarios', [MedicosController::class, 'horarios'])->name('medico.horarios');
+    Route::post('/medico/horarios', [MedicosController::class, 'guardarHorarios'])->name('medico.guardarHorarios');
+    Route::get('/medico/expedientes', [MedicosController::class, 'expedientes'])->name('medico.expedientes');
+    Route::get('/medico/expedientes/{pacienteId}', [MedicosController::class, 'verExpediente'])->name('medico.verExpediente');
+    Route::post('/medico/citas/{citaId}/estado', [MedicosController::class, 'actualizarEstadoCita'])->name('medico.actualizarEstadoCita');
+    Route::post('/medico/citas/{citaId}/notas', [MedicosController::class, 'guardarNotasMedicas'])->name('medico.guardarNotasMedicas');
+
+    // Rutas de administración de médicos (solo admin)
+    Route::middleware('role:administrador')->group(function () {
+        Route::get('/medicos/create', [MedicosController::class, 'create'])->name('medicos.create');
+        Route::post('/medicos', [MedicosController::class, 'store'])->name('medicos.store');
+        Route::get('/medicos/{id}/edit', [MedicosController::class, 'edit'])->name('medicos.edit');
+        Route::put('/medicos/{id}', [MedicosController::class, 'update'])->name('medicos.update');
+        Route::delete('/medicos/{id}', [MedicosController::class, 'destroy'])->name('medicos.destroy');
+    });
+});

@@ -7,4 +7,17 @@ use Illuminate\Database\Eloquent\Model;
 class Clinica extends Model
 {
     public $timestamps = false;
+
+    protected $fillable = [
+        'nombre',
+        'direccion',
+        'telefono',
+        'correo',
+        'responsable',
+        'estado'
+    ];
+
+    protected $attributes = [
+        'estado' => 'activo'
+    ];
 }

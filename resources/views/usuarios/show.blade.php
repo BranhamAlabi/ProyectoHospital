@@ -34,11 +34,17 @@
     <div class="row mb-4">
       <label class="col-sm-2 col-form-label">Estado:</label>
       <div class="col-sm-10">{{ ucfirst($usuario->estado) }}</div>
-    </div>
+    </div>    <div class="d-flex gap-2">
+      @php
+        $userRoles = $usuario->roles->pluck('nombre')->toArray();
+        $isAdminOrMod = in_array('administrador', $userRoles) || in_array('moderador', $userRoles);
+        $currentUserRoles = session('usuario_rol', []);
+        $currentUserIsMod = in_array('moderador', $currentUserRoles);
+      @endphp
 
-    <div class="d-flex gap-2">
-
-      <a href="{{ route('usuarios.edit', $usuario->id) }}" class="btn btn-success">Editar Usuario</a>
+      @if(!($isAdminOrMod && $currentUserIsMod))
+        <a href="{{ route('usuarios.edit', $usuario->id) }}" class="btn btn-success">Editar Usuario</a>
+      @endif
 
       <a href="{{ route('usuarios.index') }}" class="btn btn-secondary">Volver</a>
     </div>

@@ -15,7 +15,11 @@ class MedicosController extends Controller
     public function index(Request $request)
     {
         $query = Medico::with(['usuario', 'clinicas', 'especialidades'])->whereHas('usuario', function ($q) {
-            $q->where('estado', 'activo');
+            $q-                'created_at' => $expediente->created_at->format('d/m/Y H:i'),
+                'fecha_cita' => $expediente->cita ? \Carbon\Carbon::parse($expediente->cita->fecha)->format('d/m/Y') : 'N/A',
+                'hora_cita' => $expediente->cita ? \Carbon\Carbon::parse($expediente->cita->hora)->format('H:i') : 'N/A',
+                'motivo_cita' => $expediente->cita ? $expediente->cita->motivo : 'N/A',
+            ];e('estado', 'activo');
         });
 
         // Filtrar por clínica
@@ -165,23 +169,45 @@ class MedicosController extends Controller
         Mail::to($usuario->correo)->send(new \App\Mail\MedicoUpdated($medico, $usuario));
 
         return redirect()->route('medicos.index')->with('success', 'Médico eliminado correctamente.');
-    }
-
-    // Mostrar inicio exclusivo para médicos
-    public function inicio()
+    }    // Mostrar inicio exclusivo para médicos
+    public function inicio(Request $request)
     {
         $usuario = auth()->user();
         $medico = Medico::where('id', $usuario->id)->with(['clinicas', 'especialidades'])->first();
         
         if (!$medico) {
             return redirect()->route('login')->with('error', 'No tienes permisos de médico.');
-        }        // Obtener citas del médico para la semana actual
-        $fechaInicio = now()->startOfWeek();
-        $fechaFin = now()->endOfWeek();
+        }
+
+        // Filtros
+        $filtroEstado = $request->get('estado', 'todas');
+        $filtroFecha = $request->get('fecha', 'proximas');
         
-        $citas = \App\Models\Cita::where('medico_id', $medico->id)
-            ->whereBetween('fecha', [$fechaInicio, $fechaFin])
-            ->with(['paciente', 'clinica'])
+        // Obtener citas según los filtros
+        $query = \App\Models\Cita::where('medico_id', $medico->id);
+        
+        // Filtro por estado
+        if ($filtroEstado !== 'todas') {
+            $query->where('estado', $filtroEstado);
+        }
+        
+        // Filtro por fecha
+        switch ($filtroFecha) {
+            case 'hoy':
+                $query->whereDate('fecha', now()->toDateString());
+                break;
+            case 'semana':
+                $query->whereBetween('fecha', [now()->startOfWeek(), now()->endOfWeek()]);
+                break;
+            case 'proximas':
+                $query->where('fecha', '>=', now()->toDateString());
+                break;
+            case 'pasadas':
+                $query->where('fecha', '<', now()->toDateString());
+                break;
+        }
+        
+        $citas = $query->with(['paciente', 'clinica'])
             ->orderBy('fecha')
             ->orderBy('hora')
             ->get();
@@ -191,6 +217,11 @@ class MedicosController extends Controller
         $citasAprobadas = \App\Models\Cita::where('medico_id', $medico->id)->where('estado', 'aprobada')->count();
         $citasPendientes = \App\Models\Cita::where('medico_id', $medico->id)->where('estado', 'pendiente')->count();
         $citasCanceladas = \App\Models\Cita::where('medico_id', $medico->id)->where('estado', 'cancelada')->count();
+        
+        // Citas de hoy
+        $citasHoy = \App\Models\Cita::where('medico_id', $medico->id)
+            ->whereDate('fecha', now()->toDateString())
+            ->count();
 
         // Obtener notificaciones no leídas
         $notificaciones = collect(); // Temporal hasta implementar notificaciones
@@ -203,7 +234,9 @@ class MedicosController extends Controller
                 ->get();
         } catch (\Exception $e) {
             // Si no existe la tabla de notificaciones aún
-        }        // Obtener horarios del médico
+        }
+
+        // Obtener horarios del médico
         $horarios = collect(); // Temporal hasta asegurar que no haya errores
         try {
             $horarios = \App\Models\DoctorSchedule::where('medico_id', $medico->id)
@@ -219,10 +252,13 @@ class MedicosController extends Controller
             'citasAprobadas',
             'citasPendientes', 
             'citasCanceladas',
+            'citasHoy',
             'notificaciones', 
-            'horarios'
+            'horarios',
+            'filtroEstado',
+            'filtroFecha'
         ));
-    }    // Gestionar horarios del médico
+    }// Gestionar horarios del médico
     public function horarios()
     {
         $usuario = auth()->user();
@@ -469,7 +505,7 @@ class MedicosController extends Controller
                 'fecha_cita' => $expediente->cita ? \Carbon\Carbon::parse($expediente->cita->fecha)->format('d/m/Y') : 'N/A',
                 'hora_cita' => $expediente->cita ? \Carbon\Carbon::parse($expediente->cita->hora)->format('H:i') : 'N/A',
                 'motivo_cita' => $expediente->cita ? $expediente->cita->motivo : 'N/A',
-            ];
+            };
         });
 
         return response()->json([
@@ -481,5 +517,158 @@ class MedicosController extends Controller
             ],
             'expedientes' => $expedientesData
         ]);
+    }
+
+    /**
+     * Filter appointments for doctor dashboard
+     */
+    public function filterCitas(Request $request)
+    {
+        try {
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'Usuario no autenticado'], 401);
+            }
+
+            $medico = Medico::where('usuario_id', $user->id)->first();
+            if (!$medico) {
+                return response()->json(['success' => false, 'message' => 'Médico no encontrado'], 404);
+            }
+
+            $query = Cita::where('medico_id', $medico->id)
+                         ->with(['usuario', 'especialidad', 'clinica', 'doctorSchedule']);
+
+            // Apply filters
+            if ($request->filled('estado')) {
+                $query->where('estado', $request->estado);
+            }
+
+            if ($request->filled('fecha_inicio')) {
+                $query->whereDate('fecha', '>=', $request->fecha_inicio);
+            }
+
+            if ($request->filled('fecha_fin')) {
+                $query->whereDate('fecha', '<=', $request->fecha_fin);
+            }
+
+            $citas = $query->orderBy('fecha', 'asc')
+                          ->orderBy('hora', 'asc')
+                          ->get();
+
+            $html = view('gestion.partials.citas_table', compact('citas'))->render();
+
+            return response()->json([
+                'success' => true,
+                'html' => $html,
+                'count' => $citas->count()
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error filtering appointments: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error interno del servidor: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update appointment status
+     */
+    public function updateCitaStatus(Request $request)
+    {
+        try {
+            $request->validate([
+                'cita_id' => 'required|exists:citas,id',
+                'estado' => 'required|in:completada,cancelada,no_asistio'
+            ]);
+
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'Usuario no autenticado'], 401);
+            }
+
+            $medico = Medico::where('usuario_id', $user->id)->first();
+            if (!$medico) {
+                return response()->json(['success' => false, 'message' => 'Médico no encontrado'], 404);
+            }
+
+            $cita = Cita::where('id', $request->cita_id)
+                        ->where('medico_id', $medico->id)
+                        ->first();
+
+            if (!$cita) {
+                return response()->json(['success' => false, 'message' => 'Cita no encontrada'], 404);
+            }
+
+            $cita->estado = $request->estado;
+            
+            if ($request->estado === 'completada') {
+                $cita->asistio = true;
+            } elseif ($request->estado === 'no_asistio') {
+                $cita->asistio = false;
+            }
+
+            $cita->updated_by = $user->id;
+            $cita->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Estado de la cita actualizado exitosamente',
+                'cita' => [
+                    'id' => $cita->id,
+                    'estado' => $cita->estado,
+                    'asistio' => $cita->asistio
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error updating appointment status: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error interno del servidor: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get appointment details
+     */
+    public function getCitaDetails($id)
+    {
+        try {
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'Usuario no autenticado'], 401);
+            }
+
+            $medico = Medico::where('usuario_id', $user->id)->first();
+            if (!$medico) {
+                return response()->json(['success' => false, 'message' => 'Médico no encontrado'], 404);
+            }
+
+            $cita = Cita::where('id', $id)
+                        ->where('medico_id', $medico->id)
+                        ->with(['usuario', 'especialidad', 'clinica', 'doctorSchedule', 'medicalNotes'])
+                        ->first();
+
+            if (!$cita) {
+                return response()->json(['success' => false, 'message' => 'Cita no encontrada'], 404);
+            }
+
+            $html = view('gestion.partials.cita_details', compact('cita'))->render();
+
+            return response()->json([
+                'success' => true,
+                'html' => $html
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error getting appointment details: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error interno del servidor: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

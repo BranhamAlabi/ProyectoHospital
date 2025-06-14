@@ -37,6 +37,7 @@ Route::post('resetear-contrasena', [AuthController::class, 'resetPassword'])
      ->name('password.update');
 
 use App\Http\Controllers\MedicosController;
+use App\Http\Controllers\PacienteCitasController;
 
 // Usuarios
 Route::resource('usuarios', UsuariosController::class);
@@ -48,6 +49,8 @@ Route::middleware('auth')->group(function () {
 
     // Clínica
     Route::get('/clinica', [ClinicaController::class, 'show'])->name('clinica.show');
+    Route::get('/clinica/index', [ClinicaController::class, 'index'])->name('clinica.index');
+    Route::get('/gestion/clinicas', [GestionController::class, 'listarClinicas'])->name('gestion.listarClinicas');
 
     // Expediente Médico Paciente
     Route::get('/paciente/expediente', [GestionController::class, 'expedientePaciente'])->name('paciente.expediente');
@@ -67,6 +70,16 @@ Route::middleware('auth')->group(function () {
     Route::get('/clinica/editar', [ClinicaController::class, 'edit'])->name('clinica.edit');
     Route::put('/clinica', [ClinicaController::class, 'update'])->name('clinica.update');
 
+    // Citas de Pacientes
+    Route::get('/paciente/citas/crear', [PacienteCitasController::class, 'create'])->name('paciente.citas.create');
+    Route::post('/paciente/citas', [PacienteCitasController::class, 'store'])->name('paciente.citas.store');
+    Route::get('/paciente/citas/medicos-por-especialidad', [PacienteCitasController::class, 'getMedicosPorEspecialidad'])->name('paciente.citas.medicosPorEspecialidad');
+    Route::get('/paciente/citas/horarios-disponibles', [PacienteCitasController::class, 'getHorariosDisponibles'])->name('paciente.citas.horariosDisponibles');
+    Route::post('/paciente/citas/{id}/cancelar', [PacienteCitasController::class, 'cancelar'])->name('paciente.citas.cancelar');
+
+    // Cambiar nombre de ruta para inicio paciente
+    Route::get('/paciente/inicio', [GestionController::class, 'inicioPaciente'])->name('paciente.inicio');
+
     // Citas
     Route::get('/citas', [CitaController::class, 'index'])->name('citas.index');
     Route::get('/citas/{id}', [CitaController::class, 'show'])->name('citas.show');
@@ -83,9 +96,10 @@ Route::middleware('auth')->group(function () {
     // Panel del Médico
     Route::get('/medico/inicio', [MedicosController::class, 'inicio'])->name('medico.inicio');
     Route::get('/medico/horarios', [MedicosController::class, 'horarios'])->name('medico.horarios');
-    Route::post('/medico/horarios', [MedicosController::class, 'guardarHorarios'])->name('medico.guardarHorarios');
-    Route::get('/medico/expedientes', [MedicosController::class, 'expedientes'])->name('medico.expedientes');
+    Route::post('/medico/horarios', [MedicosController::class, 'guardarHorarios'])->name('medico.guardarHorarios');    Route::get('/medico/expedientes', [MedicosController::class, 'expedientes'])->name('medico.expedientes');
     Route::get('/medico/expedientes/{pacienteId}', [MedicosController::class, 'verExpediente'])->name('medico.verExpediente');
-    Route::post('/medico/citas/{citaId}/estado', [MedicosController::class, 'actualizarEstadoCita'])->name('medico.actualizarEstadoCita');
+    Route::get('/medico/expedientes/{pacienteId}/lista', [MedicosController::class, 'listarExpedientesPaciente'])->name('medico.listarExpedientesPaciente');
+    Route::post('/medico/citas/{id}/estado', [CitaController::class, 'actualizarEstado'])->name('medico.actualizarEstadoCita');
+    Route::post('/medico/expedientes', [MedicosController::class, 'guardarExpediente'])->name('medico.guardarExpediente');
     Route::post('/medico/citas/{citaId}/notas', [MedicosController::class, 'guardarNotasMedicas'])->name('medico.guardarNotasMedicas');
 });

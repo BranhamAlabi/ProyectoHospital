@@ -45,15 +45,15 @@ class AuthController extends Controller
         // 4. Autenticar al usuario usando Laravel auth
         Auth::login($usuario);
 
-        // 5. Guardar datos esenciales en sesión (opcional)
+        // 5. Guardar datos esenciales en sesión de manera explícita como array
         $roles = $usuario->roles()->pluck('nombre')->map(function($r) {
             return strtolower($r);
-        })->toArray();
+        })->toArray(); // Aseguramos que sea un array
 
         session([
-            'usuario_id'     => $usuario->id,
+            'usuario_id' => $usuario->id,
             'usuario_nombre' => $usuario->nombre,
-            'usuario_rol'    => $roles,
+            'usuario_rol' => $roles // Guardamos el array de roles
         ]);
 
         // 6. Redirigir a la URL anterior o a la gestión inicio según rol

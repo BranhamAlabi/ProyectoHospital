@@ -28,4 +28,14 @@ class Medico extends Model
     {
         return $this->belongsToMany(Clinica::class, 'medico_clinica', 'medico_id', 'clinica_id');
     }
+
+    public function doctorSchedules()
+    {
+        return $this->hasMany(DoctorSchedule::class, 'medico_id');
+    }
+
+    public function citas()
+    {
+        return $this->hasMany(Cita::class, 'medico_id');
+    }
 }
