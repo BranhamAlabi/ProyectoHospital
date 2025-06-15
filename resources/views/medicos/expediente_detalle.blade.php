@@ -36,13 +36,15 @@
                     <h5 class="mb-0"><i class="fas fa-history"></i> Historial Médico</h5>
                 </div>
                 <div class="card-body">
-                    @if($citas->count() > 0)
-                        <div class="timeline">
+                    @if($citas->count() > 0)                        <div class="timeline">
                             @foreach($citas as $cita)
+                            @php
+                                $estadoLower = strtolower(trim($cita->estado));
+                            @endphp
                             <div class="card mb-3 border-{{ 
-                                $cita->estado == 'completada' ? 'success' : 
-                                ($cita->estado == 'pendiente' ? 'warning' : 
-                                ($cita->estado == 'confirmada' ? 'primary' : 'danger')) 
+                                $estadoLower == 'completada' ? 'success' : 
+                                ($estadoLower == 'pendiente' ? 'warning' : 
+                                ($estadoLower == 'confirmada' ? 'primary' : 'danger')) 
                             }}">
                                 <div class="card-header bg-light">
                                     <div class="d-flex justify-content-between align-items-center">
@@ -52,9 +54,9 @@
                                             {{ \Carbon\Carbon::parse($cita->hora)->format('H:i') }}
                                         </h6>
                                         <span class="badge bg-{{ 
-                                            $cita->estado == 'completada' ? 'success' : 
-                                            ($cita->estado == 'pendiente' ? 'warning' : 
-                                            ($cita->estado == 'confirmada' ? 'primary' : 'danger')) 
+                                            $estadoLower == 'completada' ? 'success' : 
+                                            ($estadoLower == 'pendiente' ? 'warning' : 
+                                            ($estadoLower == 'confirmada' ? 'primary' : 'danger')) 
                                         }}">
                                             {{ ucfirst($cita->estado) }}
                                         </span>
@@ -67,7 +69,7 @@
                                             <p><strong>Clínica:</strong> {{ $cita->clinica->nombre }}</p>
                                         </div>
                                         <div class="col-md-6 text-md-end">
-                                            @if($cita->estado == 'pendiente' || $cita->estado == 'confirmada')
+                                            @if(in_array($estadoLower, ['pendiente', 'confirmada']))
                                             <button class="btn btn-success btn-sm" onclick="cambiarEstado({{ $cita->id }}, 'completada')">
                                                 <i class="fas fa-check"></i> Marcar como Completada
                                             </button>

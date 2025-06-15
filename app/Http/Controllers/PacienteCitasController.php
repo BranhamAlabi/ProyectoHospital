@@ -21,13 +21,10 @@ class PacienteCitasController extends Controller
     public function index(Request $request)
     {
         $pacienteId = Auth::id();
-        
-        $query = Cita::where('paciente_id', $pacienteId)
-            ->with(['medico.usuario', 'medico.especialidades', 'clinica']);
-
-        // Aplicar filtros
+          $query = Cita::where('paciente_id', $pacienteId)
+            ->with(['medico.usuario', 'medico.especialidades', 'clinica']);// Aplicar filtros
         if ($request->filled('estado')) {
-            $query->where('estado', $request->estado);
+            $query->whereRaw('LOWER(TRIM(estado)) = ?', [strtolower(trim($request->estado))]);
         }
 
         if ($request->filled('fecha_desde')) {
@@ -64,13 +61,18 @@ class PacienteCitasController extends Controller
         // Obtener datos para los filtros
         $especialidades = Especialidad::all();
         $clinicas = Clinica::all();
-        $medicos = Medico::with('usuario')->get();
-
-        // Estadísticas rápidas
+        $medicos = Medico::with('usuario')->get();        // Estadísticas rápidas - usando case-insensitive comparisons
         $totalCitas = Cita::where('paciente_id', $pacienteId)->count();
-        $citasAprobadas = Cita::where('paciente_id', $pacienteId)->where('estado', 'aprobada')->count();
-        $citasPendientes = Cita::where('paciente_id', $pacienteId)->where('estado', 'pendiente')->count();
-        $citasCanceladas = Cita::where('paciente_id', $pacienteId)->where('estado', 'cancelada')->count();
+        $citasAprobadas = Cita::where('paciente_id', $pacienteId)
+            ->whereRaw('LOWER(TRIM(estado)) = ?', ['aprobada'])->count();
+        $citasConfirmadas = Cita::where('paciente_id', $pacienteId)
+            ->whereRaw('LOWER(TRIM(estado)) = ?', ['confirmada'])->count();
+        $citasPendientes = Cita::where('paciente_id', $pacienteId)
+            ->whereRaw('LOWER(TRIM(estado)) = ?', ['pendiente'])->count();
+        $citasPendientesReprog = Cita::where('paciente_id', $pacienteId)
+            ->whereRaw('LOWER(TRIM(estado)) = ?', ['pendiente_reprogramacion'])->count();
+        $citasCanceladas = Cita::where('paciente_id', $pacienteId)
+            ->whereRaw('LOWER(TRIM(estado)) = ?', ['cancelada'])->count();
 
         return view('paciente.citas', compact(
             'citas', 
@@ -79,7 +81,9 @@ class PacienteCitasController extends Controller
             'medicos',
             'totalCitas',
             'citasAprobadas',
+            'citasConfirmadas',
             'citasPendientes',
+            'citasPendientesReprog',
             'citasCanceladas'
         ));
     }
@@ -261,8 +265,7 @@ class PacienteCitasController extends Controller
 
     /**
      * Cancelar una cita
-     */
-    public function cancelar(Request $request, $id)
+     */    public function cancelar(Request $request, $id)
     {
         $cita = Cita::where('id', $id)
             ->where('paciente_id', Auth::id())
@@ -273,7 +276,11 @@ class PacienteCitasController extends Controller
             return response()->json(['error' => 'Cita no encontrada o no se puede cancelar.'], 404);
         }
 
-        $cita->update(['estado' => 'cancelada']);
+        // Actualizar estado a cancelada y marcar como inasistencia
+        $cita->update([
+            'estado' => 'cancelada',
+            'asistio' => false // Marcar como inasistencia cuando el paciente cancela
+        ]);
 
         return response()->json(['success' => 'Cita cancelada exitosamente.']);
     }

@@ -71,14 +71,12 @@
                                 <span class="text-truncate" style="max-width: 200px; display: inline-block;" title="{{ $expediente->motivo }}">
                                     {{ Str::limit($expediente->motivo, 50) }}
                                 </span>
-                            </td>                            <td>
-                                @php
-                                    $estadoLower = strtolower(trim($expediente->estado));
-                                @endphp
+                            </td>
+                            <td>
                                 <span class="badge bg-{{ 
-                                    $estadoLower == 'confirmada' ? 'success' : 
-                                    ($estadoLower == 'aprobada' ? 'primary' : 
-                                    ($estadoLower == 'pendiente' ? 'warning' : 'danger')) 
+                                    $expediente->estado == 'aprobada' ? 'success' : 
+                                    ($expediente->estado == 'pendiente' ? 'warning' : 
+                                    ($expediente->estado == 'confirmada' ? 'primary' : 'danger')) 
                                 }}">
                                     {{ ucfirst($expediente->estado) }}
                                 </span>
@@ -152,12 +150,14 @@
                                                                 <small class="text-muted d-block">Clínica</small>
                                                                 <strong>{{ $expediente->clinica->nombre ?? 'N/A' }}</strong>
                                                             </div>
-                                                        </div>                                                        <div class="col-md-6">                                                            <div class="border-start border-dark border-3 ps-3">
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="border-start border-dark border-3 ps-3">
                                                                 <small class="text-muted d-block">Estado</small>
                                                                 <span class="badge bg-{{ 
-                                                                    $estadoLower == 'confirmada' ? 'success' : 
-                                                                    ($estadoLower == 'aprobada' ? 'primary' : 
-                                                                    ($estadoLower == 'pendiente' ? 'warning' : 'danger')) 
+                                                                    $expediente->estado == 'aprobada' ? 'success' : 
+                                                                    ($expediente->estado == 'pendiente' ? 'warning' : 
+                                                                    ($expediente->estado == 'confirmada' ? 'primary' : 'danger')) 
                                                                 }}">
                                                                     {{ ucfirst($expediente->estado) }}
                                                                 </span>
@@ -175,25 +175,10 @@
                                                         </div>
                                                     </div>
                                                 </div>
-                                            </div>                                            <!-- Notas médicas -->
-                                            @if($expediente->expedienteMedico && $expediente->expedienteMedico->notas)
-                                                <div class="card border-success">
-                                                    <div class="card-header bg-success text-white">
-                                                        <h6 class="mb-0">
-                                                            <i class="fas fa-notes-medical"></i> Notas del Expediente Médico
-                                                        </h6>
-                                                    </div>
-                                                    <div class="card-body">
-                                                        <div class="border rounded p-3 mb-3 bg-light">
-                                                            <div style="white-space: pre-wrap;">{{ $expediente->expedienteMedico->notas }}</div>
-                                                            <small class="text-muted">
-                                                                <i class="fas fa-clock"></i> 
-                                                                Registrado el {{ $expediente->expedienteMedico->created_at->format('d/m/Y H:i') }}
-                                                            </small>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            @elseif($expediente->medicalNotes->count() > 0)
+                                            </div>
+
+                                            <!-- Notas médicas -->
+                                            @if($expediente->medicalNotes->count() > 0)
                                                 <div class="card border-success">
                                                     <div class="card-header bg-success text-white">
                                                         <h6 class="mb-0">
@@ -237,7 +222,8 @@
                                                             </div>
                                                         @endforeach
                                                     </div>
-                                                </div>                                            @else
+                                                </div>
+                                            @else
                                                 <div class="alert alert-info">
                                                     <i class="fas fa-info-circle"></i>
                                                     No hay notas médicas registradas para esta consulta.
@@ -257,10 +243,11 @@
                     </tbody>
                 </table>
             </div>
-            @else            <div class="text-center py-5">
+            @else
+            <div class="text-center py-5">
                 <i class="fas fa-folder-medical fa-3x text-muted mb-3"></i>
                 <h5 class="text-muted">No tienes expedientes médicos</h5>
-                <p class="text-muted">Los expedientes aparecerán aquí una vez que tengas citas confirmadas (completadas por el médico).</p>
+                <p class="text-muted">Los expedientes aparecerán aquí una vez que tengas citas aprobadas y completadas.</p>
             </div>
             @endif
         </div>

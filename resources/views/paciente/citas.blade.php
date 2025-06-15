@@ -16,39 +16,53 @@
                             <i class="fas fa-plus"></i> Nueva Cita
                         </a>
                     </div>
-                </div>
-
-                <!-- Estadísticas rápidas -->
+                </div>                <!-- Estadísticas rápidas -->
                 <div class="card-body bg-light border-bottom">
                     <div class="row text-center">
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <div class="card border-0 bg-info text-white">
                                 <div class="card-body py-2">
                                     <h4 class="mb-0">{{ $totalCitas }}</h4>
-                                    <small>Total de Citas</small>
+                                    <small>Total</small>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <div class="card border-0 bg-success text-white">
                                 <div class="card-body py-2">
-                                    <h4 class="mb-0">{{ $citasAprobadas }}</h4>
+                                    <h4 class="mb-0">{{ $citasAprobadas ?? 0 }}</h4>
                                     <small>Aprobadas</small>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
+                            <div class="card border-0 bg-primary text-white">
+                                <div class="card-body py-2">
+                                    <h4 class="mb-0">{{ $citasConfirmadas ?? 0 }}</h4>
+                                    <small>Confirmadas</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
                             <div class="card border-0 bg-warning text-white">
                                 <div class="card-body py-2">
-                                    <h4 class="mb-0">{{ $citasPendientes }}</h4>
+                                    <h4 class="mb-0">{{ $citasPendientes ?? 0 }}</h4>
                                     <small>Pendientes</small>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
+                            <div class="card border-0 bg-dark text-white">
+                                <div class="card-body py-2">
+                                    <h4 class="mb-0">{{ $citasPendientesReprog ?? 0 }}</h4>
+                                    <small>Pend. Reprog.</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
                             <div class="card border-0 bg-secondary text-white">
                                 <div class="card-body py-2">
-                                    <h4 class="mb-0">{{ $citasCanceladas }}</h4>
+                                    <h4 class="mb-0">{{ $citasCanceladas ?? 0 }}</h4>
                                     <small>Canceladas</small>
                                 </div>
                             </div>
@@ -61,11 +75,12 @@
                     <form method="GET" action="{{ route('paciente.citas.index') }}" id="filtrosForm">
                         <div class="row g-3">
                             <div class="col-md-2">
-                                <label class="form-label"><i class="fas fa-flag"></i> Estado</label>
-                                <select name="estado" class="form-select" onchange="document.getElementById('filtrosForm').submit();">
+                                <label class="form-label"><i class="fas fa-flag"></i> Estado</label>                                <select name="estado" class="form-select" onchange="document.getElementById('filtrosForm').submit();">
                                     <option value="">Todos</option>
                                     <option value="aprobada" {{ request('estado') == 'aprobada' ? 'selected' : '' }}>Aprobada</option>
+                                    <option value="confirmada" {{ request('estado') == 'confirmada' ? 'selected' : '' }}>Confirmada</option>
                                     <option value="pendiente" {{ request('estado') == 'pendiente' ? 'selected' : '' }}>Pendiente</option>
+                                    <option value="pendiente_reprogramacion" {{ request('estado') == 'pendiente_reprogramacion' ? 'selected' : '' }}>Pendiente Reprogramación</option>
                                     <option value="cancelada" {{ request('estado') == 'cancelada' ? 'selected' : '' }}>Cancelada</option>
                                 </select>
                             </div>
@@ -125,12 +140,19 @@
                                             <td>
                                                 <div class="fw-bold">{{ \Carbon\Carbon::parse($cita->fecha)->format('d/m/Y') }}</div>
                                                 <small class="text-muted">{{ $cita->hora }}</small>
+                                            </td>                                            <td>
+                                                @if($cita->medico && $cita->medico->usuario)
+                                                    <div class="fw-bold">{{ $cita->medico->usuario->nombre }}</div>
+                                                @else
+                                                    <div class="fw-bold text-muted">N/A</div>
+                                                @endif
                                             </td>
                                             <td>
-                                                <div class="fw-bold">{{ $cita->medico->usuario->nombre ?? 'N/A' }}</div>
-                                            </td>
-                                            <td>
-                                                {{ $cita->medico->especialidades->first()->especialidad ?? 'N/A' }}
+                                                @if($cita->medico && $cita->medico->especialidades && $cita->medico->especialidades->count() > 0)
+                                                    {{ $cita->medico->especialidades->first()->especialidad }}
+                                                @else
+                                                    <span class="text-muted">N/A</span>
+                                                @endif
                                             </td>
                                             <td>
                                                 {{ $cita->clinica->nombre ?? 'N/A' }}
@@ -139,31 +161,36 @@
                                                 <span title="{{ $cita->motivo }}">
                                                     {{ Str::limit($cita->motivo, 30) }}
                                                 </span>
-                                            </td>
-                                            <td>
-                                                <span class="badge bg-{{ $cita->estado == 'aprobada' ? 'success' : ($cita->estado == 'pendiente' ? 'warning' : 'secondary') }}">
-                                                    {{ ucfirst($cita->estado) }}
+                                            </td>                                            <td>
+                                                @php
+                                                    $estadoLower = strtolower($cita->estado);
+                                                @endphp                                                <span class="badge bg-{{ 
+                                                    $estadoLower == 'aprobada' ? 'success' : 
+                                                    ($estadoLower == 'confirmada' ? 'primary' : 
+                                                    ($estadoLower == 'pendiente' ? 'warning' : 
+                                                    ($estadoLower == 'pendiente_reprogramacion' ? 'dark' : 
+                                                    ($estadoLower == 'cancelada' ? 'secondary' : 'light')))) 
+                                                }}">
+                                                    {{ $estadoLower == 'pendiente_reprogramacion' ? 'Pendiente reprogramación' : ucfirst($cita->estado) }}
                                                 </span>
                                                 @if($cita->asistio !== null)
                                                     <br><small class="text-muted">
                                                         Asistió: {{ $cita->asistio ? 'Sí' : 'No' }}
                                                     </small>
                                                 @endif
-                                            </td>
-                                            <td>
+                                            </td>                                            <td>
+                                                @php
+                                                    $estadoLower = strtolower($cita->estado);
+                                                @endphp
                                                 <div class="btn-group" role="group">
-                                                    <!-- Ver detalles -->
-                                                    <button class="btn btn-info btn-sm" onclick="verDetalleCita({{ $cita->id }})" title="Ver detalles">
-                                                        <i class="fas fa-eye"></i>
-                                                    </button>
                                                     
-                                                    <!-- Cancelar (solo si está pendiente o aprobada y es futura) -->
-                                                    @if(in_array($cita->estado, ['pendiente', 'aprobada']) && \Carbon\Carbon::parse($cita->fecha)->isFuture())
+                                                      <!-- Cancelar (solo si está pendiente, aprobada, o pendiente_reprogramacion y es futura) -->
+                                                    @if(in_array($estadoLower, ['pendiente', 'aprobada', 'pendiente_reprogramacion']) && \Carbon\Carbon::parse($cita->fecha)->isFuture())
                                                         <button class="btn btn-danger btn-sm" onclick="cancelarCita({{ $cita->id }})" title="Cancelar">
                                                             <i class="fas fa-times"></i>
                                                         </button>
-                                                    @endif                                                    <!-- Reprogramar (solo si está aprobada o pendiente y es futura) -->
-                                                    @if(in_array($cita->estado, ['aprobada', 'pendiente']) && \Carbon\Carbon::parse($cita->fecha)->isFuture())
+                                                    @endif                                                    <!-- Reprogramar (solo si está aprobada, pendiente, o pendiente_reprogramacion y es futura) -->
+                                                    @if(in_array($estadoLower, ['aprobada', 'pendiente', 'pendiente_reprogramacion']) && \Carbon\Carbon::parse($cita->fecha)->isFuture())
                                                         <a href="{{ route('paciente.citas.reprogramar', $cita->id) }}" class="btn btn-warning btn-sm" title="Reprogramar" onclick="return confirm('¿Está seguro que desea reprogramar esta cita?')">
                                                             <i class="fas fa-calendar-alt"></i>
                                                         </a>

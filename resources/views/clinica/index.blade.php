@@ -103,11 +103,22 @@
                     <td>{{ $clinica->telefono ?? 'N/A' }}</td>
                     <td>{{ $clinica->correo ?? 'N/A' }}</td>
                     <td>{{ $clinica->responsable ?? 'N/A' }}</td>
-                    <td>{{ ucfirst($clinica->estado) }}</td>
-                    <td>                    @if(in_array('administrador', session('usuario_rol', [])))
-                    <button class="btn btn-sm btn-warning" type="button" data-bs-toggle="collapse" data-bs-target="#editForm{{ $clinica->id }}" aria-expanded="false" aria-controls="editForm{{ $clinica->id }}">
-                        Editar
-                    </button>
+                    <td>{{ ucfirst($clinica->estado) }}</td>                    <td>
+                    @if(in_array('administrador', session('usuario_rol', [])))
+                    <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-warning" type="button" data-bs-toggle="collapse" data-bs-target="#editForm{{ $clinica->id }}" aria-expanded="false" aria-controls="editForm{{ $clinica->id }}">
+                            <i class="fas fa-edit"></i> Editar
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="confirmarEliminacion({{ $clinica->id }}, '{{ $clinica->nombre }}')">
+                            <i class="fas fa-trash"></i> Eliminar
+                        </button>
+                        
+                        <!-- Formulario oculto para eliminar -->
+                        <form id="eliminar-form-{{ $clinica->id }}" action="{{ route('clinica.destroy', $clinica->id) }}" method="POST" style="display: none;">
+                            @csrf
+                            @method('DELETE')
+                        </form>
+                    </div>
                     @endif
                     </td>
                 </tr>
@@ -152,8 +163,15 @@
                     <td colspan="7" class="text-center">No se encontraron clínicas.</td>
                 </tr>
                 @endforelse
-            </tbody>
-        </table>
+            </tbody>        </table>
     </div>
 </div>
+
+<script>
+function confirmarEliminacion(clinicaId, nombreClinica) {
+    if (confirm(`¿Está seguro que desea eliminar la clínica "${nombreClinica}"?\n\nEsta acción no se puede deshacer y eliminará todos los datos asociados.`)) {
+        document.getElementById('eliminar-form-' + clinicaId).submit();
+    }
+}
+</script>
 @endsection

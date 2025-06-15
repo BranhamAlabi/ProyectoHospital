@@ -19,7 +19,7 @@
     </div>
 
     <div class="mb-3">
-        <strong>Médico:</strong> {{ $cita->medico->nombre ?? 'N/A' }}
+        <strong>Médico:</strong> {{ $cita->medico->usuario->nombre ?? 'N/A' }}
     </div>
 
     <div class="mb-3">
@@ -40,17 +40,18 @@
 
     <div class="mb-3">
         <strong>Aprobado por:</strong> {{ $cita->actualizador->nombre ?? 'No especificado' }}
-    </div>
-
-    <form method="POST" action="{{ route('citas.updateStatus', $cita->id) }}">
+    </div>    <form method="POST" action="{{ route('citas.updateStatus', $cita->id) }}">
         @csrf
         <div class="mb-3">
             <label for="estado" class="form-label">Actualizar Estado</label>
+        @php
+            $estadoLower = strtolower(trim($cita->estado));
+        @endphp
         <select name="estado" id="estado" class="form-select" required>
-            <option value="aprobada" @selected($cita->estado == 'aprobada')>Aprobada</option>
-            <option value="cancelada" @selected($cita->estado == 'cancelada')>Cancelada</option>
-            <option value="pendiente" @selected($cita->estado == 'pendiente')>Pendiente</option>
-            <option value="pendiente_reprogramacion" @selected($cita->estado == 'pendiente_reprogramacion')>Pendiente Reprogramación</option>
+            <option value="aprobada" @selected($estadoLower == 'aprobada')>Aprobada</option>
+            <option value="cancelada" @selected($estadoLower == 'cancelada')>Cancelada</option>
+            <option value="pendiente" @selected($estadoLower == 'pendiente')>Pendiente</option>
+            <option value="pendiente_reprogramacion" @selected($estadoLower == 'pendiente_reprogramacion')>Pendiente Reprogramación</option>
         </select>
         </div>
 

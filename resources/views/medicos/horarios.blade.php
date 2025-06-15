@@ -8,10 +8,12 @@
         <div class="card-header bg-primary text-white">
             <h5 class="mb-0"><i class="fas fa-clock"></i> Configuración de Horarios</h5>
         </div>
-        <div class="card-body">
-            @if(session('success'))
+        <div class="card-body">            @if(session('success'))
                 <div class="alert alert-success alert-dismissible fade show">
-                    {{ session('success') }}
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-check-circle me-3 fs-4"></i>
+                        <div>{{ session('success') }}</div>
+                    </div>
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
             @endif
@@ -29,8 +31,7 @@
 
             <form action="{{ route('medico.guardarHorarios') }}" method="POST" id="formHorarios">
                 @csrf
-                
-                <div class="row mb-4">
+                  <div class="row mb-4">
                     <div class="col-12">
                         <div class="bg-light p-3 rounded">
                             <h6 class="text-primary"><i class="fas fa-info-circle"></i> Instrucciones</h6>
@@ -43,9 +44,23 @@
                         </div>
                     </div>
                 </div>
-
-                <div id="horarios-container">
+                
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="alert alert-warning border-0">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-exclamation-triangle me-3 mt-1"></i>
+                                <div>
+                                    <strong>Importante:</strong> Si modifica o elimina horarios que ya tienen citas aprobadas (pendientes de confirmación), 
+                                    esas citas cambiarán automáticamente a estado <strong>"Pendiente de reprogramación"</strong> para que pueda reagendarlas 
+                                    con los pacientes afectados.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div><div id="horarios-container">
                     @if($horarios->count() > 0)
+                        
                         @foreach($horarios as $index => $horario)
                         <div class="row mb-3 horario-row border rounded p-3">
                             <div class="col-md-2">
@@ -69,14 +84,24 @@
                                         </option>
                                     @endforeach
                                 </select>
-                            </div>
-                            <div class="col-md-2">
+                            </div>                            <div class="col-md-2">
                                 <label class="form-label">Hora inicio</label>
                                 <select name="horarios[{{ $index }}][hora_inicio]" class="form-select hora-select" required>
                                     @for($h = 6; $h <= 22; $h++)
-                                        <option value="{{ sprintf('%02d:00', $h) }}" 
-                                            {{ $horario->hora_inicio == sprintf('%02d:00', $h) ? 'selected' : '' }}>
-                                            {{ sprintf('%02d:00', $h) }}
+                                        @php
+                                            $horaFormato = sprintf('%02d:00', $h);
+                                            // Obtener la hora como string y extraer solo HH:MM
+                                            $horaInicioBD = $horario->hora_inicio;
+                                            if ($horaInicioBD instanceof \Carbon\Carbon) {
+                                                $horaInicioBD = $horaInicioBD->format('H:i');
+                                            } else {
+                                                // Si es string, extraer solo HH:MM
+                                                $horaInicioBD = substr($horaInicioBD, 0, 5);
+                                            }
+                                            $isSelected = ($horaInicioBD == $horaFormato);
+                                        @endphp
+                                        <option value="{{ $horaFormato }}" {{ $isSelected ? 'selected' : '' }}>
+                                            {{ $horaFormato }}
                                         </option>
                                     @endfor
                                 </select>
@@ -85,9 +110,20 @@
                                 <label class="form-label">Hora fin</label>
                                 <select name="horarios[{{ $index }}][hora_fin]" class="form-select hora-select" required>
                                     @for($h = 7; $h <= 23; $h++)
-                                        <option value="{{ sprintf('%02d:00', $h) }}" 
-                                            {{ $horario->hora_fin == sprintf('%02d:00', $h) ? 'selected' : '' }}>
-                                            {{ sprintf('%02d:00', $h) }}
+                                        @php
+                                            $horaFormato = sprintf('%02d:00', $h);
+                                            // Obtener la hora como string y extraer solo HH:MM
+                                            $horaFinBD = $horario->hora_fin;
+                                            if ($horaFinBD instanceof \Carbon\Carbon) {
+                                                $horaFinBD = $horaFinBD->format('H:i');
+                                            } else {
+                                                // Si es string, extraer solo HH:MM
+                                                $horaFinBD = substr($horaFinBD, 0, 5);
+                                            }
+                                            $isSelected = ($horaFinBD == $horaFormato);
+                                        @endphp
+                                        <option value="{{ $horaFormato }}" {{ $isSelected ? 'selected' : '' }}>
+                                            {{ $horaFormato }}
                                         </option>
                                     @endfor
                                 </select>
@@ -176,9 +212,7 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-save"></i> Guardar Horarios
                         </button>
-                        <button type="button" class="btn btn-secondary" onclick="validarHorarios()">
-                            <i class="fas fa-check"></i> Validar Horarios
-                        </button>
+                        
                     </div>
                 </div>
             </form>

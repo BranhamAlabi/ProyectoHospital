@@ -5,9 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Medico;
 use App\Models\Clinica;
 use App\Models\Usuarios;
+use App\Models\PacienteExpediente;
+use App\Models\Cita;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 
 class MedicosController extends Controller
 {
@@ -165,34 +168,88 @@ class MedicosController extends Controller
         Mail::to($usuario->correo)->send(new \App\Mail\MedicoUpdated($medico, $usuario));
 
         return redirect()->route('medicos.index')->with('success', 'Médico eliminado correctamente.');
-    }
-
-    // Mostrar inicio exclusivo para médicos
-    public function inicio()
+    }    // Mostrar inicio exclusivo para médicos
+    public function inicio(Request $request)
     {
         $usuario = auth()->user();
         $medico = Medico::where('id', $usuario->id)->with(['clinicas', 'especialidades'])->first();
         
         if (!$medico) {
             return redirect()->route('login')->with('error', 'No tienes permisos de médico.');
-        }        // Obtener citas del médico para la semana actual
-        $fechaInicio = now()->startOfWeek();
-        $fechaFin = now()->endOfWeek();
+        }
+
+        // Configurar filtros de fecha
+        $filtro = $request->get('filtro', 'semana'); // semana, proximas, pasadas
+        $fechaCustom = $request->get('fecha');
         
-        $citas = \App\Models\Cita::where('medico_id', $medico->id)
-            ->whereBetween('fecha', [$fechaInicio, $fechaFin])
-            ->with(['paciente', 'clinica'])
-            ->orderBy('fecha')
+        $query = \App\Models\Cita::where('medico_id', $medico->id)
+            ->with(['paciente', 'clinica']);
+
+        // Aplicar filtros de fecha
+        switch ($filtro) {
+            case 'proximas':
+                $query->where('fecha', '>', now()->toDateString());
+                break;
+            case 'pasadas':
+                $query->where('fecha', '<', now()->toDateString());
+                break;
+            case 'fecha_custom':
+                if ($fechaCustom) {
+                    $query->whereDate('fecha', $fechaCustom);
+                }
+                break;
+            case 'semana':
+            default:
+                // Citas de la semana actual (por defecto)
+                $fechaInicio = now()->startOfWeek();
+                $fechaFin = now()->endOfWeek();
+                $query->whereBetween('fecha', [$fechaInicio, $fechaFin]);
+                break;
+        }
+
+        // Filtros adicionales
+        if ($request->has('estado') && $request->estado != '') {
+            $query->where('estado', $request->estado);
+        }
+
+        if ($request->has('paciente') && $request->paciente != '') {
+            $query->whereHas('paciente', function($q) use ($request) {
+                $q->where('nombre', 'LIKE', '%' . $request->paciente . '%');
+            });
+        }
+
+        $citas = $query->orderBy('fecha')
             ->orderBy('hora')
+            ->get();        // Obtener estadísticas generales
+        $totalCitas = \App\Models\Cita::where('medico_id', $medico->id)->count();
+        $citasAprobadas = \App\Models\Cita::where('medico_id', $medico->id)
+            ->whereRaw('LOWER(estado) = ?', ['aprobada'])->count();
+        $citasPendientes = \App\Models\Cita::where('medico_id', $medico->id)
+            ->whereRaw('LOWER(estado) = ?', ['pendiente'])->count();
+        $citasCanceladas = \App\Models\Cita::where('medico_id', $medico->id)
+            ->whereRaw('LOWER(estado) = ?', ['cancelada'])->count();// Estadísticas de la semana actual
+        $fechaInicioSemana = now()->startOfWeek();
+        $fechaFinSemana = now()->endOfWeek();
+        
+        $citasSemanaSolo = \App\Models\Cita::where('medico_id', $medico->id)
+            ->whereBetween('fecha', [$fechaInicioSemana, $fechaFinSemana])
             ->get();
 
-        // Obtener todas las citas del médico para estadísticas
-        $totalCitas = \App\Models\Cita::where('medico_id', $medico->id)->count();
-        $citasAprobadas = \App\Models\Cita::where('medico_id', $medico->id)->where('estado', 'aprobada')->count();
-        $citasPendientes = \App\Models\Cita::where('medico_id', $medico->id)->where('estado', 'pendiente')->count();
-        $citasCanceladas = \App\Models\Cita::where('medico_id', $medico->id)->where('estado', 'cancelada')->count();
-
-        // Obtener notificaciones no leídas
+        $citasAprobadasSemana = $citasSemanaSolo->filter(function($cita) {
+            return strtolower($cita->estado) === 'aprobada';
+        })->count();
+        $citasPendientesSemana = $citasSemanaSolo->filter(function($cita) {
+            return strtolower($cita->estado) === 'pendiente';
+        })->count();
+        $citasConfirmadasSemana = $citasSemanaSolo->filter(function($cita) {
+            return strtolower($cita->estado) === 'confirmada';
+        })->count();
+        $citasPendientesReprogramacionSemana = $citasSemanaSolo->filter(function($cita) {
+            return strtolower($cita->estado) === 'pendiente_reprogramacion';
+        })->count();
+        $citasCanceladasSemana = $citasSemanaSolo->filter(function($cita) {
+            return strtolower($cita->estado) === 'cancelada';
+        })->count();// Obtener notificaciones no leídas
         $notificaciones = collect(); // Temporal hasta implementar notificaciones
         try {
             $notificaciones = \App\Models\Notification::where('usuario_id', $usuario->id)
@@ -203,26 +260,35 @@ class MedicosController extends Controller
                 ->get();
         } catch (\Exception $e) {
             // Si no existe la tabla de notificaciones aún
-        }        // Obtener horarios del médico
+        }
+
+        // Obtener horarios del médico
         $horarios = collect(); // Temporal hasta asegurar que no haya errores
         try {
             $horarios = \App\Models\DoctorSchedule::where('medico_id', $medico->id)
                 ->get();
         } catch (\Exception $e) {
             // Si no existe la tabla aún
-        }
-
-        return view('gestion.inicio_medico', compact(
+        }        return view('gestion.inicio_medico', compact(
             'medico', 
             'citas', 
             'totalCitas',
             'citasAprobadas',
-            'citasPendientes', 
+            'citasPendientes',
             'citasCanceladas',
-            'notificaciones', 
-            'horarios'
+            'citasAprobadasSemana',
+            'citasPendientesSemana',
+            'citasConfirmadasSemana',
+            'citasPendientesReprogramacionSemana',
+            'citasCanceladasSemana',
+            'notificaciones',
+            'horarios',
+            'filtro',
+            'fechaCustom'
         ));
-    }    // Gestionar horarios del médico
+    }
+
+    // Gestionar horarios del médico
     public function horarios()
     {
         $usuario = auth()->user();
@@ -293,10 +359,23 @@ class MedicosController extends Controller
                     }
                 }
             }
+        }        if (!empty($errores)) {
+            return redirect()->back()->withErrors($errores)->withInput();
         }
 
-        if (!empty($errores)) {
-            return redirect()->back()->withErrors($errores)->withInput();
+        // Obtener horarios existentes antes de eliminarlos
+        $horariosExistentes = \App\Models\DoctorSchedule::where('medico_id', $medico->id)->get();
+        
+        // Analizar cambios y identificar citas afectadas
+        $citasAfectadas = $this->identificarCitasAfectadasPorCambioHorario($medico->id, $horariosExistentes, $validated['horarios']);
+        
+        // Cambiar estado de citas afectadas a pendiente_reprogramacion
+        if (!empty($citasAfectadas)) {
+            Cita::whereIn('id', $citasAfectadas)->update([
+                'estado' => 'Pendiente_reprogramacion',
+                'comentarios' => 'Cita marcada para reprogramación debido a cambio en horarios del médico',
+                'updated_at' => now()
+            ]);
         }
 
         // Eliminar horarios existentes
@@ -315,7 +394,13 @@ class MedicosController extends Controller
             ]);
         }
 
-        return redirect()->route('medico.horarios')->with('success', 'Horarios actualizados correctamente.');
+        $mensaje = 'Horarios actualizados correctamente.';
+        if (!empty($citasAfectadas)) {
+            $cantidadCitas = count($citasAfectadas);
+            $mensaje .= " Se marcaron {$cantidadCitas} cita(s) para reprogramación debido a los cambios en horarios.";
+        }
+
+        return redirect()->route('medico.horarios')->with('success', $mensaje);
     }
 
     // Ver expedientes de pacientes
@@ -358,11 +443,10 @@ class MedicosController extends Controller
             ->get();
 
         return view('medicos.expediente_detalle', compact('medico', 'paciente', 'citas'));
-    }
-
-    /**
+    }    /**
      * Actualizar estado de cita
-     */    public function actualizarEstadoCita(Request $request, $citaId)
+     */    
+    public function actualizarEstadoCita(Request $request, $citaId)
     {
         $request->validate([
             'estado' => 'required|in:Pendiente,Confirmada,Cancelada,Pendiente_reprogramacion',
@@ -377,37 +461,54 @@ class MedicosController extends Controller
             return redirect()->back()->with('error', 'No tienes permiso para actualizar esta cita.');
         }
 
+        // 🚫 NUEVA RESTRICCIÓN: No permitir editar citas ya confirmadas o canceladas
+        if (in_array($cita->estado, ['Confirmada', 'Cancelada'])) {
+            return redirect()->back()->with('error', 'No puedes modificar una cita que ya ha sido confirmada o cancelada.');
+        }
+
         $estadoAnterior = $cita->estado;
         $cita->estado = $request->estado;
         $cita->comentarios = $request->comentarios;
+        
+        // 🚫 Lógica para registrar inasistencias
+        if ($request->estado === 'Cancelada') {
+            // Cuando el médico cancela una cita, se considera inasistencia del paciente
+            $cita->asistio = false;
+            \Log::info('Cita cancelada por médico - registrada como inasistencia', [
+                'cita_id' => $citaId,
+                'paciente_id' => $cita->paciente_id,
+                'medico_id' => $medicoId,
+                'comentarios' => $request->comentarios
+            ]);
+        } elseif ($request->estado === 'Confirmada') {
+            // Cuando se confirma la cita, se considera que el paciente asistió
+            $cita->asistio = true;
+            \Log::info('Cita confirmada - registrada como asistencia', [
+                'cita_id' => $citaId,
+                'paciente_id' => $cita->paciente_id,
+                'medico_id' => $medicoId
+            ]);
+        }
+        // Para estados 'Pendiente' y 'Pendiente_reprogramacion' no se modifica asistio
+        
         $cita->save();
 
+        // Mostrar modal de expediente solo si se confirma la cita
         if ($estadoAnterior !== 'Confirmada' && $request->estado === 'Confirmada') {
             return redirect()->back()->with([
-                'success' => 'Cita actualizada correctamente.',
+                'success' => 'Cita confirmada correctamente. El paciente ha sido registrado como asistente.',
                 'mostrar_expediente' => true,
                 'cita_id' => $citaId
             ]);
         }
 
-        return redirect()->back()->with('success', 'Cita actualizada correctamente.');
-        if ($cita->medico_id != auth()->id) {
-            return redirect()->back()->with('error', 'No tienes permiso para actualizar esta cita.');
+        // Mensaje específico para cancelaciones
+        if ($request->estado === 'Cancelada') {
+            return redirect()->back()->with('warning', 'Cita cancelada. Se ha registrado como inasistencia del paciente.');
         }
 
-        $estadoAnterior = $cita->estado;
-        $cita->estado = $request->estado;
-        $cita->comentarios = $request->comentarios;
-        $cita->save();
-
-        // Si el estado cambió a Confirmada, mostrar el modal de expediente
-        if ($estadoAnterior !== 'Confirmada' && $request->estado === 'Confirmada') {
-            session()->flash('mostrar_expediente', true);
-            session()->flash('cita_id', $citaId);
-        }
-
-        return redirect()->back()->with('success', 'Cita actualizada correctamente.');
-    }    public function guardarExpediente(Request $request)
+        return redirect()->back()->with('success', 'Estado de la cita actualizado correctamente.');
+    }public function guardarExpediente(Request $request)
     {
         $request->validate([
             'cita_id' => 'required|exists:citas,id',
@@ -481,5 +582,186 @@ class MedicosController extends Controller
             ],
             'expedientes' => $expedientesData
         ]);
+    }
+    
+    // Mostrar formulario de expediente personal del paciente
+    public function expedientePersonal($pacienteId)
+    {
+        $usuario = auth()->user();
+        $medico = Medico::where('id', $usuario->id)->first();
+        
+        if (!$medico) {
+            return redirect()->route('login')->with('error', 'No tienes permisos de médico.');
+        }        // Verificar que el paciente existe y tiene citas con este médico
+        $paciente = Usuarios::find($pacienteId);
+        if (!$paciente) {
+            return redirect()->route('medico.expedientes')->with('error', 'Paciente no encontrado.');
+        }        // Verificar que el médico tenga citas con este paciente
+        $tieneCitas = Cita::where('medico_id', $medico->id)
+            ->where('paciente_id', $pacienteId)
+            ->exists();
+
+        if (!$tieneCitas) {
+            return redirect()->route('medico.expedientes')->with('error', 'No tienes autorización para ver este expediente.');
+        }        // Buscar el expediente personal existente o crear uno nuevo
+        $expedientePersonal = PacienteExpediente::where('id_paciente', $pacienteId)->first();
+
+        return view('medicos.expediente-personal', compact('paciente', 'medico', 'expedientePersonal'));
+    }
+
+    // Guardar expediente personal del paciente
+    public function guardarExpedientePersonal(Request $request, $pacienteId)
+    {
+        $usuario = auth()->user();
+        $medico = Medico::where('id', $usuario->id)->first();
+        
+        if (!$medico) {
+            return redirect()->route('login')->with('error', 'No tienes permisos de médico.');
+        }        // Verificar que el paciente existe
+        $paciente = Usuarios::find($pacienteId);
+        if (!$paciente) {
+            return redirect()->route('medico.expedientes')->with('error', 'Paciente no encontrado.');
+        }        // Validar los datos del formulario
+        $request->validate([
+            'fecha_nacimiento' => 'required|date|before:today',
+            'sexo' => 'required|in:M,F,Otro',
+            'direccion' => 'required|string',
+            'telefono' => 'required|string|max:20',
+            'enfermedades_cronicas' => 'nullable|string',
+            'cirugias_previas' => 'nullable|string',
+            'alergias' => 'nullable|string',
+            'tratamientos_actuales' => 'nullable|string'
+        ]);        // Actualizar o crear el expediente personal
+        $expedientePersonal = PacienteExpediente::updateOrCreate(
+            ['id_paciente' => $pacienteId],
+            [
+                'fecha_nacimiento' => $request->fecha_nacimiento,
+                'sexo' => $request->sexo,
+                'direccion' => $request->direccion,
+                'telefono' => $request->telefono,
+                'enfermedades_cronicas' => $request->enfermedades_cronicas,
+                'cirugias_previas' => $request->cirugias_previas,
+                'alergias' => $request->alergias,
+                'tratamientos_actuales' => $request->tratamientos_actuales,
+                'editado_por' => $medico->id
+            ]
+        );        return redirect()->route('medico.expedientePersonal', $pacienteId)
+            ->with('success', 'Expediente personal actualizado correctamente.');
+    }
+
+    /**
+     * Identifica las citas afectadas por cambios en horarios del médico
+     * 
+     * @param int $medicoId ID del médico
+     * @param \Illuminate\Database\Eloquent\Collection $horariosExistentes Horarios actuales
+     * @param array $nuevosHorarios Nuevos horarios a guardar
+     * @return array IDs de citas afectadas
+     */
+    private function identificarCitasAfectadasPorCambioHorario($medicoId, $horariosExistentes, $nuevosHorarios)
+    {
+        $citasAfectadas = [];
+        
+        // Crear array de nuevos horarios para comparación más fácil
+        $nuevosHorariosMap = [];
+        foreach ($nuevosHorarios as $horario) {
+            $key = $horario['dia_semana'] . '_' . $horario['clinica_id'];
+            if (!isset($nuevosHorariosMap[$key])) {
+                $nuevosHorariosMap[$key] = [];
+            }
+            $nuevosHorariosMap[$key][] = [
+                'hora_inicio' => $horario['hora_inicio'],
+                'hora_fin' => $horario['hora_fin']
+            ];
+        }
+        
+        // Verificar cada horario existente
+        foreach ($horariosExistentes as $horarioExistente) {
+            $key = $horarioExistente->dia_semana . '_' . $horarioExistente->clinica_id;
+            $horarioEliminadoOModificado = false;
+            
+            // Verificar si este horario específico sigue existiendo
+            if (!isset($nuevosHorariosMap[$key])) {
+                // El día/clínica completo fue eliminado
+                $horarioEliminadoOModificado = true;
+            } else {
+                // Verificar si el rango de horas específico sigue existiendo
+                $horaInicioExistente = substr($horarioExistente->hora_inicio, 0, 5); // HH:MM
+                $horaFinExistente = substr($horarioExistente->hora_fin, 0, 5); // HH:MM
+                
+                $rangoEncontrado = false;
+                foreach ($nuevosHorariosMap[$key] as $nuevoRango) {
+                    if ($nuevoRango['hora_inicio'] === $horaInicioExistente && 
+                        $nuevoRango['hora_fin'] === $horaFinExistente) {
+                        $rangoEncontrado = true;
+                        break;
+                    }
+                }
+                
+                if (!$rangoEncontrado) {
+                    $horarioEliminadoOModificado = true;
+                }
+            }
+            
+            // Si el horario fue eliminado o modificado, buscar citas afectadas
+            if ($horarioEliminadoOModificado) {
+                $citasEnEsteHorario = $this->buscarCitasEnHorario($medicoId, $horarioExistente);
+                $citasAfectadas = array_merge($citasAfectadas, $citasEnEsteHorario);
+            }
+        }
+        
+        return array_unique($citasAfectadas);
+    }
+    
+    /**
+     * Busca citas aprobadas (no confirmadas) en un horario específico
+     * 
+     * @param int $medicoId ID del médico
+     * @param \App\Models\DoctorSchedule $horario Horario a verificar
+     * @return array IDs de citas en este horario
+     */
+    private function buscarCitasEnHorario($medicoId, $horario)
+    {
+        // Mapear días de la semana a números (0=domingo, 1=lunes, etc.)
+        $diasSemana = [
+            'Domingo' => 0,
+            'Lunes' => 1,
+            'Martes' => 2,
+            'Miércoles' => 3,
+            'Jueves' => 4,
+            'Viernes' => 5,
+            'Sábado' => 6
+        ];
+        
+        $numeroDia = $diasSemana[$horario->dia_semana] ?? null;
+        if ($numeroDia === null) {
+            return [];
+        }
+        
+        // Buscar citas aprobadas (no confirmadas ni canceladas) del médico en este horario
+        $citas = Cita::where('medico_id', $medicoId)
+            ->where('clinica_id', $horario->clinica_id)
+            ->whereIn('estado', ['aprobada', 'Aprobada']) // Solo citas aprobadas
+            ->where('fecha', '>=', now()->toDateString()) // Solo citas futuras
+            ->get();
+        
+        $citasEnHorario = [];
+        
+        foreach ($citas as $cita) {
+            $fechaCita = \Carbon\Carbon::parse($cita->fecha);
+            $horaCita = \Carbon\Carbon::parse($cita->hora)->format('H:i');
+            
+            // Verificar si la cita es en el día de la semana correcto
+            if ($fechaCita->dayOfWeek === $numeroDia) {
+                // Verificar si la hora de la cita está en el rango del horario
+                $horaInicioHorario = substr($horario->hora_inicio, 0, 5);
+                $horaFinHorario = substr($horario->hora_fin, 0, 5);
+                
+                if ($horaCita >= $horaInicioHorario && $horaCita < $horaFinHorario) {
+                    $citasEnHorario[] = $cita->id;
+                }
+            }
+        }
+        
+        return $citasEnHorario;
     }
 }

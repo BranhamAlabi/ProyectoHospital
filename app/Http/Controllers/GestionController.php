@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use App\Models\Clinica;
 use App\Models\PacienteExpediente;
 
@@ -26,19 +27,25 @@ class GestionController extends Controller
             ->with(['medico.usuario', 'medico.especialidades', 'clinica'])
             ->orderBy('fecha', 'desc')
             ->orderBy('hora', 'desc')
-            ->get();
-
-        // Calcular estadísticas
+            ->get();        // Calcular estadísticas - usando case-insensitive comparisons
         $citasAprobadas = \App\Models\Cita::where('paciente_id', $usuario->id)
-            ->where('estado', 'aprobada')
+            ->whereRaw('LOWER(TRIM(estado)) = ?', ['aprobada'])
+            ->count();
+
+        $citasConfirmadas = \App\Models\Cita::where('paciente_id', $usuario->id)
+            ->whereRaw('LOWER(TRIM(estado)) = ?', ['confirmada'])
             ->count();
 
         $citasPendientes = \App\Models\Cita::where('paciente_id', $usuario->id)
-            ->where('estado', 'pendiente')
+            ->whereRaw('LOWER(TRIM(estado)) = ?', ['pendiente'])
+            ->count();
+
+        $citasPendientesReprog = \App\Models\Cita::where('paciente_id', $usuario->id)
+            ->whereRaw('LOWER(TRIM(estado)) = ?', ['pendiente_reprogramacion'])
             ->count();
 
         $citasCanceladas = \App\Models\Cita::where('paciente_id', $usuario->id)
-            ->where('estado', 'cancelada')
+            ->whereRaw('LOWER(TRIM(estado)) = ?', ['cancelada'])
             ->count();
 
         // Calcular porcentaje de asistencia
@@ -66,13 +73,13 @@ class GestionController extends Controller
                 ->get();
         } catch (\Exception $e) {
             // Si no existe la tabla de expediente aún
-        }
-
-        return view('gestion.inicio_paciente', compact(
+        }        return view('gestion.inicio_paciente', compact(
             'citasProximas', 
             'citasPasadas', 
             'citasAprobadas',
-            'citasPendientes', 
+            'citasConfirmadas',
+            'citasPendientes',
+            'citasPendientesReprog', 
             'citasCanceladas',
             'porcentajeAsistencia',
             'notificaciones', 
@@ -168,22 +175,21 @@ class GestionController extends Controller
     // New method to list clinics with filters
     public function listarClinicas(Request $request)
     {
-        abort(404);
-    }
+        abort(404);    }
 
     // Mostrar todos los expedientes médicos del paciente
     public function expedientesPaciente()
     {
         $usuario = auth()->user();
-        
-        // Obtener todas las citas del paciente con sus relaciones
+          // Obtener todas las citas del paciente con sus relaciones
         $expedientes = \App\Models\Cita::where('paciente_id', $usuario->id)
-            ->where('estado', 'aprobada') // Solo citas aprobadas tienen expedientes médicos
+            ->where('estado', 'confirmada') // Solo citas confirmadas tienen expedientes médicos
             ->with([
                 'medico.usuario', 
                 'medico.especialidades', 
                 'clinica',
-                'medicalNotes' // Relación con las notas médicas
+                'medicalNotes', // Relación con las notas médicas
+                'expedienteMedico' // Relación con el expediente médico (tabla expedientes_medicos)
             ])
             ->orderBy('fecha', 'desc')
             ->orderBy('hora', 'desc')

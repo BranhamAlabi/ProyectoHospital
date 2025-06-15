@@ -13,9 +13,9 @@
     <h1 class="mt-4">
         <i class="fas fa-user-circle me-2"></i>Mi Perfil
     </h1>    <ol class="breadcrumb mb-4">
-        @if(Auth::user()->roles->contains('nombre', 'Paciente'))
+        @if(Auth::user()->roles->contains('nombre', 'paciente'))
             <li class="breadcrumb-item"><a href="{{ route('gestion.inicioPaciente') }}">Dashboard</a></li>
-        @elseif(Auth::user()->roles->contains('nombre', 'Medico'))
+        @elseif(Auth::user()->roles->contains('nombre', 'medico'))
             <li class="breadcrumb-item"><a href="{{ route('medico.inicio') }}">Dashboard</a></li>
         @else
             <li class="breadcrumb-item"><a href="{{ route('gestion.inicio') }}">Dashboard</a></li>

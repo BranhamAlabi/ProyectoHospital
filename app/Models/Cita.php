@@ -50,28 +50,63 @@ class Cita extends Model
     public function doctorSchedule()
     {
         return $this->belongsTo(DoctorSchedule::class, 'doctor_schedule_id');
-    }
-
-    /**
+    }    /**
      * Calcula el porcentaje de asistencia del paciente
+     * 
+     * Incluye en el cálculo:
+     * - Citas confirmadas: Se consideran como asistencia (independientemente de la fecha)
+     * - Citas canceladas: Se consideran como inasistencia (independientemente de la fecha)
+     * - Citas con asistio definido: Se usan según su valor
+     * - Citas pendientes futuras: No se incluyen en el cálculo
      */
     public static function calcularPorcentajeAsistencia($pacienteId)
     {
-        $totalCitasPasadas = self::where('paciente_id', $pacienteId)
-            ->where('fecha', '<', now()->toDateString())
-            ->whereNotNull('asistio')
+        // Contar todas las citas que deben incluirse en el cálculo
+        $totalCitasEvaluadas = self::where('paciente_id', $pacienteId)
+            ->where(function($query) {
+                $query->where(function($q) {
+                    // Citas pasadas/hoy con asistio definido
+                    $q->where('fecha', '<=', now()->toDateString())
+                      ->whereNotNull('asistio');
+                })->orWhere(function($q) {
+                    // Citas confirmadas (futuras o pasadas)
+                    $q->whereRaw('LOWER(TRIM(estado)) = ?', ['confirmada']);
+                })->orWhere(function($q) {
+                    // Citas canceladas (futuras o pasadas) - cuentan como inasistencia
+                    $q->whereRaw('LOWER(TRIM(estado)) = ?', ['cancelada']);
+                });
+            })
             ->count();
 
-        if ($totalCitasPasadas == 0) {
-            return 100; // Si no tiene historial, considerar 100% por defecto
+        if ($totalCitasEvaluadas == 0) {
+            // Si no tiene historial evaluado, verificar si tiene citas futuras pendientes
+            $citasPendientesFuturas = self::where('paciente_id', $pacienteId)
+                ->where('fecha', '>', now()->toDateString())
+                ->whereNotIn('estado', ['cancelada', 'Cancelada', 'confirmada', 'Confirmada'])
+                ->count();
+            
+            if ($citasPendientesFuturas > 0) {
+                return null; // Paciente nuevo con solo citas pendientes - no mostrar porcentaje
+            }
+            
+            return 100; // Si no tiene citas, considerar 100% por defecto
         }
 
+        // Contar citas que se consideran como asistencia
         $citasAsistidas = self::where('paciente_id', $pacienteId)
-            ->where('fecha', '<', now()->toDateString())
-            ->where('asistio', true)
+            ->where(function($query) {
+                $query->where(function($q) {
+                    // Citas pasadas/hoy marcadas como asistidas
+                    $q->where('fecha', '<=', now()->toDateString())
+                      ->where('asistio', true);
+                })->orWhere(function($q) {
+                    // Citas confirmadas se consideran como asistidas
+                    $q->whereRaw('LOWER(TRIM(estado)) = ?', ['confirmada']);
+                });
+            })
             ->count();
 
-        return round(($citasAsistidas / $totalCitasPasadas) * 100, 2);
+        return round(($citasAsistidas / $totalCitasEvaluadas) * 100, 2);
     }
 
     /**
@@ -112,10 +147,41 @@ class Cita extends Model
     public function scopeCanceladas($query)
     {
         return $query->where('estado', 'cancelada');
-    }
-
-    public function medicalNotes()
+    }    public function medicalNotes()
     {
         return $this->hasMany(MedicalNote::class, 'cita_id');
+    }
+
+    public function expedienteMedico()
+    {
+        return $this->hasOne(ExpedienteMedico::class, 'cita_id');
+    }
+
+    /**
+     * Obtiene estadísticas detalladas de asistencia del paciente
+     */
+    public static function obtenerEstadisticasAsistencia($pacienteId)
+    {
+        $citasPasadas = self::where('paciente_id', $pacienteId)
+            ->where('fecha', '<', now()->toDateString())
+            ->whereNotNull('asistio');
+
+        $totalEvaluadas = $citasPasadas->count();
+        $asistencias = $citasPasadas->where('asistio', true)->count();
+        $inasistencias = $citasPasadas->where('asistio', false)->count();
+        
+        $porcentajeAsistencia = $totalEvaluadas > 0 
+            ? round(($asistencias / $totalEvaluadas) * 100, 2)
+            : 100;
+
+        return [
+            'total_evaluadas' => $totalEvaluadas,
+            'asistencias' => $asistencias,
+            'inasistencias' => $inasistencias,
+            'porcentaje_asistencia' => $porcentajeAsistencia,
+            'porcentaje_inasistencia' => $totalEvaluadas > 0 
+                ? round(($inasistencias / $totalEvaluadas) * 100, 2) 
+                : 0
+        ];
     }
 }

@@ -110,6 +110,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/medico/horarios', [MedicosController::class, 'guardarHorarios'])->name('medico.guardarHorarios');    Route::get('/medico/expedientes', [MedicosController::class, 'expedientes'])->name('medico.expedientes');
     Route::get('/medico/expedientes/{pacienteId}', [MedicosController::class, 'verExpediente'])->name('medico.verExpediente');
     Route::get('/medico/expedientes/{pacienteId}/lista', [MedicosController::class, 'listarExpedientesPaciente'])->name('medico.listarExpedientesPaciente');
+    Route::get('/medico/expediente-personal/{pacienteId}', [MedicosController::class, 'expedientePersonal'])->name('medico.expedientePersonal');
+    Route::post('/medico/expediente-personal/{pacienteId}', [MedicosController::class, 'guardarExpedientePersonal'])->name('medico.guardarExpedientePersonal');
     Route::post('/medico/citas/{id}/estado', [CitaController::class, 'actualizarEstado'])->name('medico.actualizarEstadoCita');
     Route::post('/medico/expedientes', [MedicosController::class, 'guardarExpediente'])->name('medico.guardarExpediente');
     Route::post('/medico/citas/{citaId}/notas', [MedicosController::class, 'guardarNotasMedicas'])->name('medico.guardarNotasMedicas');

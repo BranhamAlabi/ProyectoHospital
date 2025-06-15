@@ -118,15 +118,34 @@ class CitaController extends Controller
         $cita->estado = $request->estado;
         $cita->comentarios = $request->comentarios;
         $cita->updated_by = Auth::id();
+        
+        // 🚫 Lógica para registrar inasistencias
+        if ($request->estado === 'Cancelada') {
+            // Cuando el médico cancela una cita, se considera inasistencia del paciente
+            $cita->asistio = false;
+        } elseif ($request->estado === 'Confirmada') {
+            // Cuando se confirma la cita, se considera que el paciente asistió
+            $cita->asistio = true;
+        }
+        // Para estados 'Pendiente' y 'Pendiente_reprogramacion' no se modifica asistio
+        
         $cita->save();
 
         // Si la cita se confirma, preparar para mostrar modal de expediente
         if ($request->estado === 'Confirmada' && $estadoAnterior !== 'Confirmada') {
             return response()->json([
                 'success' => true,
-                'message' => 'Cita confirmada correctamente',
+                'message' => 'Cita confirmada correctamente. El paciente ha sido registrado como asistente.',
                 'mostrar_expediente' => true,
                 'cita_id' => $cita->id
+            ]);
+        }
+
+        // Mensaje específico para cancelaciones
+        if ($request->estado === 'Cancelada') {
+            return response()->json([
+                'success' => true,
+                'message' => 'Cita cancelada. Se ha registrado como inasistencia del paciente.'
             ]);
         }
 

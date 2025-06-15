@@ -42,28 +42,34 @@
                             </td>
                             <td>
                                 <span class="badge bg-info">{{ $totalCitas }}</span>
-                            </td>
-                            <td>
+                            </td>                            <td>
                                 @if($ultimaCita)
+                                    @php
+                                        $estadoLower = strtolower(trim($ultimaCita->estado));
+                                    @endphp
                                     <span class="badge bg-{{ 
-                                        $ultimaCita->estado == 'completada' ? 'success' : 
-                                        ($ultimaCita->estado == 'pendiente' ? 'warning' : 
-                                        ($ultimaCita->estado == 'confirmada' ? 'primary' : 'danger')) 
+                                        $estadoLower == 'completada' ? 'success' : 
+                                        ($estadoLower == 'pendiente' ? 'warning' : 
+                                        ($estadoLower == 'confirmada' ? 'primary' : 'danger')) 
                                     }}">
                                         {{ ucfirst($ultimaCita->estado) }}
                                     </span>
                                 @else
                                     <span class="badge bg-secondary">Sin citas</span>
                                 @endif
-                            </td>                            <td>
+                            </td><td>
                                 <button type="button" 
-                                        class="btn btn-primary btn-sm" 
+                                        class="btn btn-primary btn-sm me-1" 
                                         data-bs-toggle="modal" 
                                         data-bs-target="#expedienteModal{{ $paciente->id }}"
                                         onclick="cargarExpedientes({{ $paciente->id }})">
                                     <i class="fas fa-eye"></i> Ver expediente
                                 </button>
-                            </td>                        </tr>                        <!-- Modal para ver expedientes del paciente -->
+                                <a href="{{ route('medico.expedientePersonal', $paciente->id) }}" 
+                                   class="btn btn-success btn-sm">
+                                    <i class="fas fa-user-edit"></i> Complementar expediente personal
+                                </a>
+                            </td></tr>                        <!-- Modal para ver expedientes del paciente -->
                         <div class="modal fade" id="expedienteModal{{ $paciente->id }}" tabindex="-1">
                             <div class="modal-dialog modal-xl">
                                 <div class="modal-content">
