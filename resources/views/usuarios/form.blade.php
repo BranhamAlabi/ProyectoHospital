@@ -182,8 +182,6 @@
     </style>
 </head>
 <body>
-    @include('Plantillas.navmoderador')
-
     <div class="container">
         <div class="form-container">
             <h1 class="form-title">
