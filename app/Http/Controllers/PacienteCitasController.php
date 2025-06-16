@@ -11,6 +11,7 @@ use App\Models\DoctorSchedule;
 use App\Models\Clinica;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Carbon\Carbon;
 
 class PacienteCitasController extends Controller
@@ -226,11 +227,22 @@ class PacienteCitasController extends Controller
             'hora' => 'required',
             'motivo' => 'required|string|max:500',
             'doctor_schedule_id' => 'required|exists:doctor_schedules,id'
-        ]);
+        ]);        $pacienteId = Auth::id();
 
-        $pacienteId = Auth::id();
+        // 🚫 NUEVA VALIDACIÓN: Verificar que el paciente no tenga otra cita en la misma fecha y hora
+        $citasSolapadas = Cita::where('paciente_id', $pacienteId)
+            ->where('fecha', $request->fecha)
+            ->where('hora', $request->hora)
+            ->whereNotIn('estado', ['cancelada']) // Excluir citas canceladas
+            ->exists();
 
-        // Verificar que la hora esté disponible
+        if ($citasSolapadas) {
+            return back()
+                ->withErrors(['hora' => 'Ya tienes una cita agendada para esta fecha y hora. No puedes tener citas simultáneas.'])
+                ->withInput();
+        }
+
+        // Verificar que la hora esté disponible con el médico
         $citasExistentes = Cita::where('medico_id', $request->medico_id)
             ->where('fecha', $request->fecha)
             ->where('hora', $request->hora)
@@ -261,13 +273,13 @@ class PacienteCitasController extends Controller
 
         return redirect()->route('gestion.inicioPaciente')
             ->with('success', "Cita agendada exitosamente. Estado: {$estadoAutomatico}");
-    }
-
-    /**
+    }    /**
      * Cancelar una cita
-     */    public function cancelar(Request $request, $id)
+     */
+    public function cancelar(Request $request, $id)
     {
-        $cita = Cita::where('id', $id)
+        $cita = Cita::with(['paciente', 'medico.usuario'])
+            ->where('id', $id)
             ->where('paciente_id', Auth::id())
             ->where('fecha', '>=', now()->toDateString())
             ->first();
@@ -276,13 +288,59 @@ class PacienteCitasController extends Controller
             return response()->json(['error' => 'Cita no encontrada o no se puede cancelar.'], 404);
         }
 
-        // Actualizar estado a cancelada y marcar como inasistencia
-        $cita->update([
-            'estado' => 'cancelada',
-            'asistio' => false // Marcar como inasistencia cuando el paciente cancela
-        ]);
+        $estadoAnterior = $cita->estado;
 
-        return response()->json(['success' => 'Cita cancelada exitosamente.']);
+        try {
+            // Actualizar estado a cancelada y marcar como inasistencia
+            $cita->update([
+                'estado' => 'cancelada',
+                'asistio' => false // Marcar como inasistencia cuando el paciente cancela
+            ]);
+
+            // 📧 Enviar correo de notificación al médico
+            try {
+                $paciente = Auth::user();
+                $actualizadoPor = $paciente->nombre ?? 'Paciente';
+                
+                // Preparar los cambios para la notificación
+                $cambios = [
+                    'estado' => [
+                        'anterior' => ucfirst($estadoAnterior),
+                        'nuevo' => 'Cancelada'
+                    ],
+                    'motivo_cancelacion' => [
+                        'anterior' => '',
+                        'nuevo' => 'Cancelada por el paciente'
+                    ]
+                ];
+
+                // Enviar al médico si tiene correo
+                if ($cita->medico && $cita->medico->usuario && $cita->medico->usuario->correo) {
+                    Mail::to($cita->medico->usuario->correo)->send(new \App\Mail\CitaModificada($cita, $cambios, $actualizadoPor));
+                }
+                
+                Log::info('Correo de cita cancelada por paciente enviado', [
+                    'cita_id' => $cita->id,
+                    'paciente_id' => Auth::id(),
+                    'medico_correo' => $cita->medico->usuario->correo ?? 'N/A',
+                    'cancelada_por' => $actualizadoPor
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Error al enviar correo de cita cancelada por paciente', [
+                    'cita_id' => $cita->id,
+                    'error' => $e->getMessage()
+                ]);
+                // No fallar la cancelación si hay error con el correo
+            }
+
+            return response()->json(['success' => 'Cita cancelada exitosamente. Se ha notificado al médico por correo.']);
+        } catch (\Exception $e) {
+            Log::error('Error al cancelar cita', [
+                'cita_id' => $cita->id,
+                'error' => $e->getMessage()
+            ]);
+            return response()->json(['error' => 'Error al cancelar la cita.'], 500);
+        }
     }
 
     /**
@@ -350,9 +408,21 @@ class PacienteCitasController extends Controller
                 return redirect()->back()
                     ->withInput()
                     ->with('error', 'Debe cambiar al menos la fecha o la hora');
+            }            // 🚫 VALIDACIÓN: Verificar que el paciente no tenga otra cita en la misma fecha y hora
+            $citasSolapadasPaciente = Cita::where('paciente_id', Auth::id())
+                ->where('fecha', $request->fecha)
+                ->where('hora', $request->hora)
+                ->where('id', '!=', $cita->id) // Excluir la cita actual
+                ->whereNotIn('estado', ['cancelada']) // Excluir citas canceladas
+                ->exists();
+
+            if ($citasSolapadasPaciente) {
+                return redirect()->back()
+                    ->withInput()
+                    ->with('error', 'Ya tienes una cita agendada para esta fecha y hora. No puedes tener citas simultáneas.');
             }
 
-            // Verificar disponibilidad del nuevo horario
+            // Verificar disponibilidad del nuevo horario con el médico
             $horarioOcupado = Cita::where('medico_id', $cita->medico_id)
                 ->where('fecha', $request->fecha)
                 ->where('hora', $request->hora)
@@ -364,7 +434,12 @@ class PacienteCitasController extends Controller
                 return redirect()->back()
                     ->withInput()
                     ->with('error', 'El horario seleccionado ya está ocupado');
-            }            // Actualizar la cita
+            }            // Guardar valores originales para la notificación
+            $fechaAnterior = $cita->fecha;
+            $horaAnterior = $cita->hora;
+            $estadoAnterior = $cita->estado;
+
+            // Actualizar la cita
             $cita->update([
                 'fecha' => $request->fecha,
                 'hora' => $request->hora,
@@ -375,18 +450,64 @@ class PacienteCitasController extends Controller
                 'updated_by' => Auth::id()
             ]);
 
+            // 📧 Enviar correo de notificación al médico
+            try {
+                $paciente = Auth::user();
+                $actualizadoPor = $paciente->nombre ?? 'Paciente';
+                
+                // Preparar los cambios para la notificación
+                $cambios = [
+                    'fecha' => [
+                        'anterior' => Carbon::parse($fechaAnterior)->format('d/m/Y'),
+                        'nuevo' => Carbon::parse($request->fecha)->format('d/m/Y')
+                    ],
+                    'hora' => [
+                        'anterior' => $horaAnterior,
+                        'nuevo' => $request->hora
+                    ],
+                    'estado' => [
+                        'anterior' => ucfirst($estadoAnterior),
+                        'nuevo' => 'Pendiente'
+                    ],
+                    'motivo_reprogramacion' => [
+                        'anterior' => '',
+                        'nuevo' => $request->comentarios
+                    ]
+                ];
+
+                // Enviar al médico si tiene correo
+                if ($cita->medico && $cita->medico->usuario && $cita->medico->usuario->correo) {
+                    Mail::to($cita->medico->usuario->correo)->send(new \App\Mail\CitaModificada($cita, $cambios, $actualizadoPor));
+                }
+                
+                Log::info('Correo de cita reprogramada por paciente enviado', [
+                    'cita_id' => $cita->id,
+                    'paciente_id' => Auth::id(),
+                    'medico_correo' => $cita->medico->usuario->correo ?? 'N/A',
+                    'fecha_anterior' => $fechaAnterior,
+                    'fecha_nueva' => $request->fecha,
+                    'reprogramada_por' => $actualizadoPor
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Error al enviar correo de cita reprogramada por paciente', [
+                    'cita_id' => $cita->id,
+                    'error' => $e->getMessage()
+                ]);
+                // No fallar la reprogramación si hay error con el correo
+            }
+
             Log::info('Cita reprogramada', [
                 'cita_id' => $cita->id,
                 'paciente_id' => Auth::id(),
-                'fecha_anterior' => $cita->getOriginal('fecha'),
-                'hora_anterior' => $cita->getOriginal('hora'),
+                'fecha_anterior' => $fechaAnterior,
+                'hora_anterior' => $horaAnterior,
                 'fecha_nueva' => $request->fecha,
                 'hora_nueva' => $request->hora,
                 'razon' => $request->comentarios
             ]);
 
             return redirect()->route('paciente.citas.index')
-                ->with('success', 'Cita reprogramada exitosamente. Su estado ha cambiado a "Pendiente" y será revisada por el personal médico.');
+                ->with('success', 'Cita reprogramada exitosamente. Su estado ha cambiado a "Pendiente" y será revisada por el personal médico. Se ha notificado al médico por correo.');
 
         } catch (\Exception $e) {
             Log::error('Error al reprogramar cita', [

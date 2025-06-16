@@ -7,6 +7,8 @@ use App\Models\Usuarios;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 
 class CitaController extends Controller
 {
@@ -61,9 +63,7 @@ class CitaController extends Controller
         // Aquí se podría cargar el historial de cambios si se implementa
 
         return view('citas.show', compact('cita'));
-    }
-
-    // Actualizar estado de cita (aprobar, desaprobar, pendiente)
+    }    // Actualizar estado de cita (aprobar, desaprobar, pendiente)
     public function updateStatus(Request $request, $id)
     {
         $request->validate([
@@ -71,34 +71,72 @@ class CitaController extends Controller
             'comentarios' => 'nullable|string',
         ]);
 
-        $cita = Cita::with(['paciente', 'medico', 'actualizador'])->findOrFail($id);
+        $cita = Cita::with(['paciente', 'medico.usuario', 'actualizador'])->findOrFail($id);
 
         // Verificar permisos y ámbito del moderador/admin aquí (pendiente implementar)
 
+        $estadoAnterior = $cita->estado;
         $cita->estado = $request->estado;
         $cita->comentarios = $request->comentarios;
         $cita->updated_by = Auth::id();
-        $cita->save();
+        
+        try {
+            $cita->save();
 
-        // Enviar correo de notificación a paciente y médico
-        $updatedBy = $cita->actualizador;
-        $emails = [];
+            // 📧 Enviar correo de notificación a paciente
+            try {
+                $actualizadoPor = Auth::user()->nombre ?? 'Administrador del sistema';
+                
+                // Preparar los cambios para la notificación
+                $cambios = [
+                    'estado' => [
+                        'anterior' => ucfirst($estadoAnterior),
+                        'nuevo' => ucfirst($request->estado)
+                    ]
+                ];
+                
+                if ($request->comentarios && $request->comentarios !== $cita->getOriginal('comentarios')) {
+                    $cambios['comentarios'] = [
+                        'anterior' => $cita->getOriginal('comentarios') ?? 'Sin comentarios',
+                        'nuevo' => $request->comentarios
+                    ];
+                }
 
-        if ($cita->paciente && $cita->paciente->correo) {
-            $emails[] = $cita->paciente->correo;
+                // Enviar al paciente si tiene correo
+                if ($cita->paciente && $cita->paciente->correo) {
+                    Mail::to($cita->paciente->correo)->send(new \App\Mail\CitaModificada($cita, $cambios, $actualizadoPor));
+                }
+
+                // También notificar al médico si tiene correo
+                if ($cita->medico && $cita->medico->usuario && $cita->medico->usuario->correo) {
+                    Mail::to($cita->medico->usuario->correo)->send(new \App\Mail\CitaModificada($cita, $cambios, $actualizadoPor));
+                }
+                
+                Log::info('Correo de cita modificada enviado', [
+                    'cita_id' => $cita->id,
+                    'cambios' => array_keys($cambios),
+                    'actualizado_por' => $actualizadoPor,
+                    'paciente_correo' => $cita->paciente->correo ?? 'N/A',
+                    'medico_correo' => $cita->medico->usuario->correo ?? 'N/A'
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Error al enviar correo de cita modificada', [
+                    'cita_id' => $cita->id,
+                    'error' => $e->getMessage()
+                ]);
+                // No fallar la actualización si hay error con el correo
+            }
+
+            return redirect()->route('citas.show', $cita->id)->with('success', 'Estado de la cita actualizado correctamente. Se han enviado notificaciones por correo.');
+        } catch (\Exception $e) {
+            Log::error('Error al actualizar estado de cita', [
+                'cita_id' => $cita->id,
+                'error' => $e->getMessage()            ]);
+            return redirect()->route('citas.show', $cita->id)->withErrors('Error al actualizar el estado de la cita.');
         }
-        if ($cita->medico && $cita->medico->correo) {
-            $emails[] = $cita->medico->correo;
-        }
+    }
 
-        if (!empty($emails)) {
-            \Illuminate\Support\Facades\Mail::to($emails)->send(new \App\Mail\CitaUpdated($cita, $updatedBy));
-        }
-
-        // Registrar auditoría y enviar notificaciones (pendiente implementar)
-
-        return redirect()->route('citas.show', $cita->id)->with('success', 'Estado de la cita actualizado correctamente.');
-    }    // Método específico para que los médicos actualicen el estado de sus citas
+    // Método específico para que los médicos actualicen el estado de sus citas
     public function actualizarEstado(Request $request, $id)
     {
         $request->validate([
@@ -106,7 +144,7 @@ class CitaController extends Controller
             'comentarios' => 'nullable|string',
         ]);
 
-        $cita = Cita::with(['paciente', 'medico'])->findOrFail($id);
+        $cita = Cita::with(['paciente', 'medico.usuario'])->findOrFail($id);
 
         // Verificar que el médico autenticado es el propietario de la cita
         // El medico_id en la tabla citas debe coincidir con el usuario autenticado
@@ -115,6 +153,8 @@ class CitaController extends Controller
         }
 
         $estadoAnterior = $cita->estado;
+        $comentariosAnteriores = $cita->comentarios;
+        
         $cita->estado = $request->estado;
         $cita->comentarios = $request->comentarios;
         $cita->updated_by = Auth::id();
@@ -129,29 +169,82 @@ class CitaController extends Controller
         }
         // Para estados 'Pendiente' y 'Pendiente_reprogramacion' no se modifica asistio
         
-        $cita->save();
+        try {
+            $cita->save();
 
-        // Si la cita se confirma, preparar para mostrar modal de expediente
-        if ($request->estado === 'Confirmada' && $estadoAnterior !== 'Confirmada') {
+            // 📧 Enviar correo de notificación al paciente si hay cambios
+            if ($estadoAnterior !== $request->estado || $comentariosAnteriores !== $request->comentarios) {
+                try {
+                    $actualizadoPor = Auth::user()->nombre ?? 'Dr. ' . ($cita->medico->usuario->nombre ?? 'Médico');
+                    
+                    // Preparar los cambios para la notificación
+                    $cambios = [];
+                    
+                    if ($estadoAnterior !== $request->estado) {
+                        $cambios['estado'] = [
+                            'anterior' => ucfirst($estadoAnterior),
+                            'nuevo' => ucfirst($request->estado)
+                        ];
+                    }
+                    
+                    if ($comentariosAnteriores !== $request->comentarios) {
+                        $cambios['comentarios'] = [
+                            'anterior' => $comentariosAnteriores ?? 'Sin comentarios',
+                            'nuevo' => $request->comentarios ?? 'Sin comentarios'
+                        ];
+                    }
+
+                    // Enviar al paciente si tiene correo
+                    if ($cita->paciente && $cita->paciente->correo && !empty($cambios)) {
+                        Mail::to($cita->paciente->correo)->send(new \App\Mail\CitaModificada($cita, $cambios, $actualizadoPor));
+                    }
+                    
+                    Log::info('Correo de cita modificada por médico enviado', [
+                        'cita_id' => $cita->id,
+                        'cambios' => array_keys($cambios),
+                        'actualizado_por' => $actualizadoPor,
+                        'paciente_correo' => $cita->paciente->correo ?? 'N/A'
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('Error al enviar correo de cita modificada por médico', [
+                        'cita_id' => $cita->id,
+                        'error' => $e->getMessage()
+                    ]);
+                    // No fallar la actualización si hay error con el correo
+                }
+            }
+
+            // Si la cita se confirma, preparar para mostrar modal de expediente
+            if ($request->estado === 'Confirmada' && $estadoAnterior !== 'Confirmada') {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Cita confirmada correctamente. El paciente ha sido registrado como asistente y se le ha notificado por correo.',
+                    'mostrar_expediente' => true,
+                    'cita_id' => $cita->id
+                ]);
+            }
+
+            // Mensaje específico para cancelaciones
+            if ($request->estado === 'Cancelada') {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Cita cancelada. Se ha registrado como inasistencia del paciente y se le ha notificado por correo.'
+                ]);
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'Cita confirmada correctamente. El paciente ha sido registrado como asistente.',
-                'mostrar_expediente' => true,
-                'cita_id' => $cita->id
+                'message' => 'Estado de la cita actualizado correctamente. Se ha notificado al paciente por correo.'
             ]);
-        }
-
-        // Mensaje específico para cancelaciones
-        if ($request->estado === 'Cancelada') {
+        } catch (\Exception $e) {
+            Log::error('Error al actualizar estado de cita por médico', [
+                'cita_id' => $cita->id,
+                'error' => $e->getMessage()
+            ]);
             return response()->json([
-                'success' => true,
-                'message' => 'Cita cancelada. Se ha registrado como inasistencia del paciente.'
-            ]);
+                'success' => false,
+                'message' => 'Error al actualizar el estado de la cita.'
+            ], 500);
         }
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Estado de la cita actualizado correctamente'
-        ]);
     }
 }

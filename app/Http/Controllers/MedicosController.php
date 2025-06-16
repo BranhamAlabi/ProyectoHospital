@@ -92,11 +92,27 @@ class MedicosController extends Controller
         // Asociar especialidades
         $medico->especialidades()->sync($validated['especialidad_ids']);
 
-        // Enviar correo de notificación al médico
-        $usuario = Usuarios::find($validated['usuario_id']);
-        Mail::to($usuario->correo)->send(new \App\Mail\MedicoUpdated($medico, $usuario));
+        // 📧 Enviar correo de notificación de asignación como médico
+        try {
+            $medico->load('usuario', 'clinicas', 'especialidades');
+            $asignadoPor = Auth::user()->nombre ?? 'Administrador del sistema';
+            
+            Mail::to($medico->usuario->correo)->send(new \App\Mail\MedicoAsignado($medico, $asignadoPor));
+            
+            Log::info('Correo de médico asignado enviado', [
+                'medico_id' => $medico->id,
+                'usuario_correo' => $medico->usuario->correo,
+                'asignado_por' => $asignadoPor
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error al enviar correo de médico asignado', [
+                'medico_id' => $medico->id,
+                'error' => $e->getMessage()
+            ]);
+            // No fallar la asignación si hay error con el correo
+        }
 
-        return redirect()->route('medicos.index')->with('success', 'Médico agregado correctamente.');
+        return redirect()->route('medicos.index')->with('success', 'Médico agregado correctamente. Se ha enviado notificación por correo.');
     }
 
     // Mostrar formulario para editar médico
@@ -110,12 +126,10 @@ class MedicosController extends Controller
         $especialidades = \App\Models\Especialidad::all();
 
         return view('medicos.edit', compact('medico', 'clinicas', 'especialidades', 'rolActual'));
-    }
-
-    // Actualizar médico
+    }    // Actualizar médico
     public function update(Request $request, $id)
     {
-        $medico = Medico::with('usuario')->findOrFail($id);
+        $medico = Medico::with(['usuario', 'clinicas', 'especialidades'])->findOrFail($id);
 
         $rolActual = session('usuario_rol');
 
@@ -130,45 +144,174 @@ class MedicosController extends Controller
 
         $validated = $request->validate($rules);
 
-        // Actualizar usuario
+        // 🔍 Detectar cambios antes de actualizar
+        $cambios = [];
         $usuario = $medico->usuario;
-        $usuario->nombre = $validated['nombre'];
-        $usuario->correo = $validated['correo'];
-        $usuario->save();
+        $correoOriginal = $usuario->correo;
 
-        // Actualizar médico
-        $medico->save();
+        // Detectar cambios en datos básicos del usuario
+        if ($usuario->nombre !== $validated['nombre']) {
+            $cambios['nombre'] = [
+                'anterior' => $usuario->nombre,
+                'nuevo' => $validated['nombre']
+            ];
+        }
 
-        // Actualizar clínicas asociadas
-        $medico->clinicas()->sync($validated['clinica_ids']);
+        if ($usuario->correo !== $validated['correo']) {
+            $cambios['correo'] = [
+                'anterior' => $usuario->correo,
+                'nuevo' => $validated['correo']
+            ];
+        }
 
-        // Actualizar especialidades asociadas
-        $medico->especialidades()->sync($validated['especialidad_ids']);
+        // Detectar cambios en especialidades
+        $especialidadesActuales = $medico->especialidades->pluck('id')->sort()->values()->toArray();
+        $especialidadesNuevas = collect($validated['especialidad_ids'])->sort()->values()->toArray();
+        
+        if ($especialidadesActuales != $especialidadesNuevas) {
+            $especialidadesActualesNombres = $medico->especialidades->pluck('especialidad')->toArray();
+            $especialidadesNuevasNombres = \App\Models\Especialidad::whereIn('id', $validated['especialidad_ids'])->pluck('especialidad')->toArray();
+            
+            $cambios['especialidades'] = [
+                'anterior' => empty($especialidadesActualesNombres) ? 'Sin especialidades' : implode(', ', $especialidadesActualesNombres),
+                'nuevo' => empty($especialidadesNuevasNombres) ? 'Sin especialidades' : implode(', ', $especialidadesNuevasNombres)
+            ];
+        }
 
-        // Enviar notificación por correo al médico
-        Mail::to($usuario->correo)->send(new \App\Mail\MedicoUpdated($medico, $usuario));
+        // Detectar cambios en clínicas
+        $clinicasActuales = $medico->clinicas->pluck('id')->sort()->values()->toArray();
+        $clinicasNuevas = collect($validated['clinica_ids'])->sort()->values()->toArray();
+        
+        if ($clinicasActuales != $clinicasNuevas) {
+            $clinicasActualesNombres = $medico->clinicas->pluck('nombre')->toArray();
+            $clinicasNuevasNombres = \App\Models\Clinica::whereIn('id', $validated['clinica_ids'])->pluck('nombre')->toArray();
+            
+            $cambios['clinicas'] = [
+                'anterior' => empty($clinicasActualesNombres) ? 'Sin clínicas' : implode(', ', $clinicasActualesNombres),
+                'nuevo' => empty($clinicasNuevasNombres) ? 'Sin clínicas' : implode(', ', $clinicasNuevasNombres)
+            ];
+        }
 
-        return redirect()->route('medicos.index')->with('success', 'Médico actualizado correctamente.');
-    }
+        try {
+            // Actualizar usuario
+            $usuario->nombre = $validated['nombre'];
+            $usuario->correo = $validated['correo'];
+            $usuario->save();
 
-    // Eliminar médico
+            // Actualizar médico
+            $medico->save();
+
+            // Actualizar clínicas asociadas
+            $medico->clinicas()->sync($validated['clinica_ids']);
+
+            // Actualizar especialidades asociadas
+            $medico->especialidades()->sync($validated['especialidad_ids']);
+
+            // 📧 Enviar correo de notificación si hubo cambios
+            if (!empty($cambios)) {
+                try {
+                    // Recargar el médico con las nuevas relaciones
+                    $medico->load('usuario', 'clinicas', 'especialidades');
+                    $actualizadoPor = Auth::user()->nombre ?? 'Administrador del sistema';
+                    
+                    // Enviar al correo original si cambió el correo, sino al actual
+                    $correoDestino = isset($cambios['correo']) ? $correoOriginal : $usuario->correo;
+                    
+                    Mail::to($correoDestino)->send(new \App\Mail\MedicoActualizado($medico, $cambios, $actualizadoPor));
+                    
+                    // Si cambió el correo, también enviar al nuevo
+                    if (isset($cambios['correo']) && $usuario->correo !== $correoOriginal) {
+                        Mail::to($usuario->correo)->send(new \App\Mail\MedicoActualizado($medico, $cambios, $actualizadoPor));
+                    }
+                    
+                    Log::info('Correo de médico actualizado enviado', [
+                        'medico_id' => $medico->id,
+                        'cambios' => array_keys($cambios),
+                        'actualizado_por' => $actualizadoPor
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('Error al enviar correo de médico actualizado', [
+                        'medico_id' => $medico->id,
+                        'error' => $e->getMessage()
+                    ]);
+                    // No fallar la actualización si hay error con el correo
+                }
+            }
+
+            $mensaje = 'Médico actualizado correctamente.';
+            if (!empty($cambios)) {
+                $mensaje .= ' Se ha enviado notificación de los cambios por correo.';
+            }
+
+            return redirect()->route('medicos.index')->with('success', $mensaje);
+        } catch (\Exception $e) {
+            Log::error('Error al actualizar médico', [
+                'medico_id' => $medico->id,
+                'error' => $e->getMessage()
+            ]);
+            return redirect()->route('medicos.index')->withErrors('Error al actualizar la información del médico.');
+        }
+    }    // Eliminar médico
     public function destroy($id)
     {
-        $medico = Medico::findOrFail($id);
+        $medico = Medico::with(['usuario', 'clinicas', 'especialidades'])->findOrFail($id);
 
         // Confirmación previa debe ser manejada en la vista
 
         $usuario = $medico->usuario;
+        $correoMedico = $usuario->correo;
+        $nombreMedico = $usuario->nombre;
 
-        $medico->clinicas()->detach();
+        try {
+            $medico->clinicas()->detach();
+            $medico->especialidades()->detach();
+            $medico->delete();
 
-        $medico->delete();
+            // 📧 Enviar correo de notificación al médico sobre la eliminación
+            try {
+                $eliminadoPor = Auth::user()->nombre ?? 'Administrador del sistema';
+                
+                // Crear un correo personalizado para la eliminación
+                $subject = 'Notificación: Asignación como médico removida - ' . config('app.name');
+                $mensaje = "
+                Estimado(a) Dr(a). {$nombreMedico},
 
-        // Enviar correo de notificación al médico
-        Mail::to($usuario->correo)->send(new \App\Mail\MedicoUpdated($medico, $usuario));
+                Te informamos que tu asignación como médico en nuestro sistema ha sido removida.
 
-        return redirect()->route('medicos.index')->with('success', 'Médico eliminado correctamente.');
-    }    // Mostrar inicio exclusivo para médicos
+                Si tienes alguna duda sobre esta acción, por favor contacta al equipo de administración.
+
+                Acción realizada por: {$eliminadoPor}
+                Fecha: " . now()->format('d/m/Y H:i:s') . "
+
+                Atentamente,
+                Equipo de " . config('app.name');
+
+                Mail::raw($mensaje, function ($mail) use ($correoMedico, $subject) {
+                    $mail->to($correoMedico)->subject($subject);
+                });
+                
+                Log::info('Correo de médico eliminado enviado', [
+                    'medico_id' => $id,
+                    'usuario_correo' => $correoMedico,
+                    'eliminado_por' => $eliminadoPor
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Error al enviar correo de médico eliminado', [
+                    'medico_id' => $id,
+                    'error' => $e->getMessage()
+                ]);
+                // No fallar la eliminación si hay error con el correo
+            }
+
+            return redirect()->route('medicos.index')->with('success', 'Médico eliminado correctamente. Se ha enviado notificación por correo.');
+        } catch (\Exception $e) {
+            Log::error('Error al eliminar médico', [
+                'medico_id' => $id,
+                'error' => $e->getMessage()
+            ]);
+            return redirect()->route('medicos.index')->withErrors('Error al eliminar el médico.');
+        }
+    }// Mostrar inicio exclusivo para médicos
     public function inicio(Request $request)
     {
         $usuario = auth()->user();
@@ -364,9 +507,7 @@ class MedicosController extends Controller
         }
 
         // Obtener horarios existentes antes de eliminarlos
-        $horariosExistentes = \App\Models\DoctorSchedule::where('medico_id', $medico->id)->get();
-        
-        // Analizar cambios y identificar citas afectadas
+        $horariosExistentes = \App\Models\DoctorSchedule::where('medico_id', $medico->id)->get();        // Analizar cambios y identificar citas afectadas
         $citasAfectadas = $this->identificarCitasAfectadasPorCambioHorario($medico->id, $horariosExistentes, $validated['horarios']);
         
         // Cambiar estado de citas afectadas a pendiente_reprogramacion
@@ -656,10 +797,15 @@ class MedicosController extends Controller
      * @param \Illuminate\Database\Eloquent\Collection $horariosExistentes Horarios actuales
      * @param array $nuevosHorarios Nuevos horarios a guardar
      * @return array IDs de citas afectadas
-     */
-    private function identificarCitasAfectadasPorCambioHorario($medicoId, $horariosExistentes, $nuevosHorarios)
+     */    private function identificarCitasAfectadasPorCambioHorario($medicoId, $horariosExistentes, $nuevosHorarios)
     {
         $citasAfectadas = [];
+        
+        \Log::info('Iniciando identificación de citas afectadas', [
+            'medico_id' => $medicoId,
+            'horarios_existentes_count' => $horariosExistentes->count(),
+            'nuevos_horarios_count' => count($nuevosHorarios)
+        ]);
         
         // Crear array de nuevos horarios para comparación más fácil
         $nuevosHorariosMap = [];
@@ -674,19 +820,34 @@ class MedicosController extends Controller
             ];
         }
         
+        \Log::info('Nuevos horarios mapeados:', $nuevosHorariosMap);
+        
         // Verificar cada horario existente
         foreach ($horariosExistentes as $horarioExistente) {
             $key = $horarioExistente->dia_semana . '_' . $horarioExistente->clinica_id;
             $horarioEliminadoOModificado = false;
             
+            \Log::info('Verificando horario existente:', [
+                'id' => $horarioExistente->id,
+                'dia_semana' => $horarioExistente->dia_semana,
+                'clinica_id' => $horarioExistente->clinica_id,
+                'hora_inicio' => $horarioExistente->hora_inicio,
+                'hora_fin' => $horarioExistente->hora_fin,
+                'key' => $key
+            ]);
+            
             // Verificar si este horario específico sigue existiendo
             if (!isset($nuevosHorariosMap[$key])) {
                 // El día/clínica completo fue eliminado
                 $horarioEliminadoOModificado = true;
-            } else {
+                \Log::info('Horario completamente eliminado para: ' . $key);            } else {
                 // Verificar si el rango de horas específico sigue existiendo
-                $horaInicioExistente = substr($horarioExistente->hora_inicio, 0, 5); // HH:MM
-                $horaFinExistente = substr($horarioExistente->hora_fin, 0, 5); // HH:MM
+                $horaInicioExistente = $horarioExistente->hora_inicio instanceof \Carbon\Carbon 
+                    ? $horarioExistente->hora_inicio->format('H:i') 
+                    : substr($horarioExistente->hora_inicio, 0, 5);
+                $horaFinExistente = $horarioExistente->hora_fin instanceof \Carbon\Carbon 
+                    ? $horarioExistente->hora_fin->format('H:i') 
+                    : substr($horarioExistente->hora_fin, 0, 5);
                 
                 $rangoEncontrado = false;
                 foreach ($nuevosHorariosMap[$key] as $nuevoRango) {
@@ -699,16 +860,23 @@ class MedicosController extends Controller
                 
                 if (!$rangoEncontrado) {
                     $horarioEliminadoOModificado = true;
+                    \Log::info('Rango horario modificado:', [
+                        'existente_inicio' => $horaInicioExistente,
+                        'existente_fin' => $horaFinExistente,
+                        'nuevos_rangos' => $nuevosHorariosMap[$key]
+                    ]);
                 }
             }
             
             // Si el horario fue eliminado o modificado, buscar citas afectadas
             if ($horarioEliminadoOModificado) {
                 $citasEnEsteHorario = $this->buscarCitasEnHorario($medicoId, $horarioExistente);
+                \Log::info('Citas encontradas en horario eliminado/modificado:', $citasEnEsteHorario);
                 $citasAfectadas = array_merge($citasAfectadas, $citasEnEsteHorario);
             }
         }
         
+        \Log::info('Citas afectadas totales:', array_unique($citasAfectadas));
         return array_unique($citasAfectadas);
     }
     
@@ -718,8 +886,7 @@ class MedicosController extends Controller
      * @param int $medicoId ID del médico
      * @param \App\Models\DoctorSchedule $horario Horario a verificar
      * @return array IDs de citas en este horario
-     */
-    private function buscarCitasEnHorario($medicoId, $horario)
+     */    private function buscarCitasEnHorario($medicoId, $horario)
     {
         // Mapear días de la semana a números (0=domingo, 1=lunes, etc.)
         $diasSemana = [
@@ -734,8 +901,19 @@ class MedicosController extends Controller
         
         $numeroDia = $diasSemana[$horario->dia_semana] ?? null;
         if ($numeroDia === null) {
+            \Log::warning('Día de semana no válido: ' . $horario->dia_semana);
             return [];
         }
+        
+        \Log::info('Buscando citas en horario:', [
+            'horario_id' => $horario->id,
+            'medico_id' => $medicoId,
+            'dia_semana' => $horario->dia_semana,
+            'numero_dia' => $numeroDia,
+            'clinica_id' => $horario->clinica_id,
+            'hora_inicio' => $horario->hora_inicio,
+            'hora_fin' => $horario->hora_fin
+        ]);
         
         // Buscar citas aprobadas (no confirmadas ni canceladas) del médico en este horario
         $citas = Cita::where('medico_id', $medicoId)
@@ -744,24 +922,47 @@ class MedicosController extends Controller
             ->where('fecha', '>=', now()->toDateString()) // Solo citas futuras
             ->get();
         
+        \Log::info('Citas candidatas encontradas: ' . $citas->count());
+        
         $citasEnHorario = [];
         
         foreach ($citas as $cita) {
             $fechaCita = \Carbon\Carbon::parse($cita->fecha);
             $horaCita = \Carbon\Carbon::parse($cita->hora)->format('H:i');
             
-            // Verificar si la cita es en el día de la semana correcto
+            \Log::info('Evaluando cita:', [
+                'cita_id' => $cita->id,
+                'fecha' => $cita->fecha,
+                'hora' => $horaCita,
+                'dia_semana_fecha' => $fechaCita->dayOfWeek,
+                'dia_requerido' => $numeroDia
+            ]);
+              // Verificar si la cita es en el día de la semana correcto
             if ($fechaCita->dayOfWeek === $numeroDia) {
                 // Verificar si la hora de la cita está en el rango del horario
-                $horaInicioHorario = substr($horario->hora_inicio, 0, 5);
-                $horaFinHorario = substr($horario->hora_fin, 0, 5);
+                $horaInicioHorario = $horario->hora_inicio instanceof \Carbon\Carbon 
+                    ? $horario->hora_inicio->format('H:i') 
+                    : substr($horario->hora_inicio, 0, 5);
+                $horaFinHorario = $horario->hora_fin instanceof \Carbon\Carbon 
+                    ? $horario->hora_fin->format('H:i') 
+                    : substr($horario->hora_fin, 0, 5);
                 
-                if ($horaCita >= $horaInicioHorario && $horaCita < $horaFinHorario) {
+                \Log::info('Verificando rango horario:', [
+                    'cita_hora' => $horaCita,
+                    'horario_inicio' => $horaInicioHorario,
+                    'horario_fin' => $horaFinHorario,
+                    'en_rango' => ($horaCita >= $horaInicioHorario && $horaCita <= $horaFinHorario)
+                ]);
+                
+                // Cambié < por <= para incluir la hora exacta de fin
+                if ($horaCita >= $horaInicioHorario && $horaCita <= $horaFinHorario) {
                     $citasEnHorario[] = $cita->id;
+                    \Log::info('Cita incluida en horario: ' . $cita->id);
                 }
             }
         }
         
+        \Log::info('Citas en horario resultado: ', $citasEnHorario);
         return $citasEnHorario;
     }
 }

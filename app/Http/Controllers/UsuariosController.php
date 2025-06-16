@@ -6,6 +6,9 @@ use App\Models\Usuarios;
 use App\Models\Rol;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 class UsuariosController extends Controller
 {
     public function __construct()
@@ -132,7 +135,24 @@ class UsuariosController extends Controller
 
         $usuario->roles()->sync([$validated['rol_id']]);
 
-        return redirect()->route('usuarios.index')->with('success', 'Usuario creado exitosamente.');
+        // 📧 Enviar correo de bienvenida al usuario creado por admin/moderador
+        try {
+            Mail::to($usuario->correo)->send(new \App\Mail\BienvenidaMeditech($usuario));
+            Log::info('Correo de bienvenida enviado a usuario creado por admin/moderador', [
+                'usuario_id' => $usuario->id,
+                'correo' => $usuario->correo,
+                'creado_por' => Auth::user()->nombre ?? 'Sistema'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error al enviar correo de bienvenida (creación por admin)', [
+                'usuario_id' => $usuario->id,
+                'correo' => $usuario->correo,
+                'error' => $e->getMessage()
+            ]);
+            // No fallar la creación si hay error con el correo
+        }
+
+        return redirect()->route('usuarios.index')->with('success', 'Usuario creado exitosamente. Se ha enviado un correo de bienvenida.');
     }
 
     // Mostrar detalle de usuario
@@ -186,6 +206,51 @@ class UsuariosController extends Controller
             'estado' => 'required|in:activo,inactivo',
         ]);
 
+        // 🔍 Detectar cambios antes de actualizar
+        $cambios = [];
+        $valoresOriginales = [
+            'nombre' => $usuario->nombre,
+            'correo' => $usuario->correo,
+            'estado' => $usuario->estado,
+            'rol' => $usuario->roles->first()->nombre ?? 'Sin rol'
+        ];
+
+        // Detectar cambios en cada campo
+        if ($usuario->nombre !== $validated['nombre']) {
+            $cambios['nombre'] = [
+                'anterior' => $usuario->nombre,
+                'nuevo' => $validated['nombre']
+            ];
+        }
+
+        if ($usuario->correo !== $validated['correo']) {
+            $cambios['correo'] = [
+                'anterior' => $usuario->correo,
+                'nuevo' => $validated['correo']
+            ];
+        }
+
+        if ($usuario->estado !== $validated['estado']) {
+            $cambios['estado'] = [
+                'anterior' => ucfirst($usuario->estado),
+                'nuevo' => ucfirst($validated['estado'])
+            ];
+        }
+
+        // Verificar cambio de rol
+        $rolNuevo = Rol::find($validated['rol_id']);
+        $rolActualUsuario = $usuario->roles->first();
+        if (!$rolActualUsuario || $rolActualUsuario->id !== $validated['rol_id']) {
+            $cambios['rol'] = [
+                'anterior' => $rolActualUsuario->nombre ?? 'Sin rol',
+                'nuevo' => $rolNuevo->nombre
+            ];
+        }
+
+        // Guardar el correo original para el envío (en caso de que cambie)
+        $correoOriginal = $usuario->correo;
+
+        // Actualizar usuario
         $usuario->nombre = $validated['nombre'];
         $usuario->correo = $validated['correo'];
         $usuario->estado = $validated['estado'];
@@ -193,7 +258,43 @@ class UsuariosController extends Controller
 
         $usuario->roles()->sync([$validated['rol_id']]);
 
-        return redirect()->route('usuarios.show', $usuario->id)->with('success', 'Usuario actualizado exitosamente.');
+        // 📧 Enviar correo de notificación si hubo cambios
+        if (!empty($cambios)) {
+            try {
+                $actualizadoPor = Auth::user()->nombre ?? 'Administrador del sistema';
+                
+                // Enviar al correo original si cambió, sino al actual
+                $correoDestino = isset($cambios['correo']) ? $correoOriginal : $usuario->correo;
+                
+                Mail::to($correoDestino)->send(new \App\Mail\UsuarioActualizado($usuario, $cambios, $actualizadoPor));
+                
+                // Si cambió el correo, también enviar al nuevo
+                if (isset($cambios['correo'])) {
+                    Mail::to($usuario->correo)->send(new \App\Mail\UsuarioActualizado($usuario, $cambios, $actualizadoPor));
+                }
+                
+                Log::info('Correo de actualización enviado', [
+                    'usuario_id' => $usuario->id,
+                    'cambios' => array_keys($cambios),
+                    'actualizado_por' => $actualizadoPor,
+                    'correo_destino' => $correoDestino
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Error al enviar correo de actualización', [
+                    'usuario_id' => $usuario->id,
+                    'cambios' => $cambios,
+                    'error' => $e->getMessage()
+                ]);
+                // No fallar la actualización si hay error con el correo
+            }
+        }
+
+        $mensaje = 'Usuario actualizado exitosamente.';
+        if (!empty($cambios)) {
+            $mensaje .= ' Se ha enviado una notificación de los cambios al usuario.';
+        }
+
+        return redirect()->route('usuarios.show', $usuario->id)->with('success', $mensaje);
     }
 
 }
